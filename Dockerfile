@@ -61,6 +61,10 @@ RUN chmod +x /var/www/html/bin/monitor_metrics.sh
 # Create startup script
 RUN echo '#!/bin/bash\n\
 service cron start\n\
+# Install composer deps if vendor missing (volume mount overlay case)\n\
+if [ ! -f /var/www/html/vendor/autoload.php ]; then\n\
+  cd /var/www/html && composer install --no-dev --optimize-autoloader --no-interaction\n\
+fi\n\
 # Ensure writable directories exist with correct ownership\n\
 mkdir -p /var/www/html/backups /var/www/html/logs\n\
 chown www-data:www-data /var/www/html/backups /var/www/html/logs\n\
