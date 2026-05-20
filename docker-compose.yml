@@ -47,6 +47,7 @@ services:
       DOCKER_HOST: tcp://dind:2375
     volumes:
       - ./:/var/www/html
+      - vendor_data:/var/www/html/vendor
     ports:
       - "8082:80"
 
@@ -64,3 +65,4 @@ services:
 volumes:
   db_data:
   dind_data:
+  vendor_data:
