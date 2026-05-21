@@ -37,6 +37,16 @@ RUN git config --global --add safe.directory /var/www/html \
 # Configure Apache
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
+# Long-running deploys need bigger Apache timeout (default 300)
+# and bigger PHP execution/memory limits.
+RUN sed -i 's/^Timeout .*/Timeout 900/' /etc/apache2/apache2.conf || echo "Timeout 900" >> /etc/apache2/apache2.conf \
+    && { \
+      echo "max_execution_time = 900"; \
+      echo "max_input_time = 900"; \
+      echo "memory_limit = 512M"; \
+      echo "default_socket_timeout = 900"; \
+    } > /usr/local/etc/php/conf.d/zz-deploy-limits.ini
+
 # Set permissions and create writable directories
 RUN mkdir -p /var/www/html/backups /var/www/html/logs \
     && chown -R www-data:www-data /var/www/html \

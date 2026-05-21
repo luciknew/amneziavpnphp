@@ -572,12 +572,16 @@ Router::get('/servers/{id}/deploy', function ($params) {
 
 // Deploy server action (AJAX)
 Router::post('/servers/{id}/deploy', function ($params) {
-    requireAuth();
-    // AWG install with first-time Docker pull/build can take several minutes.
-    // Keep PHP alive and ensure no stray output sneaks before the JSON body.
+    // Long install: lift limits, silence stray output BEFORE any other code runs
     @set_time_limit(0);
     @ignore_user_abort(true);
+    @ini_set('display_errors', '0');
+    @ini_set('html_errors', '0');
     while (ob_get_level() > 0) { ob_end_clean(); }
+    ob_start();
+    requireAuth();
+    // Discard anything any upstream code might have echoed accidentally
+    if (ob_get_length() > 0) { ob_clean(); }
     header('Content-Type: application/json');
 
     $serverId = (int) $params['id'];
@@ -612,9 +616,12 @@ Router::post('/servers/{id}/deploy', function ($params) {
         if (!isset($result['success']) && empty($result['requires_action'])) {
             $result['success'] = true;
         }
+        // Strip any incidental output captured during deploy() before emitting JSON
+        if (ob_get_length() > 0) { ob_clean(); }
         echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     } catch (Exception $e) {
         http_response_code(500);
+        if (ob_get_length() > 0) { ob_clean(); }
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 });

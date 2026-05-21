@@ -91,7 +91,14 @@ function deploy(mode) {
     body: JSON.stringify(payload)
   })
     .then(async response => {
-      const data = await response.json().catch(() => ({ success: false, error: 'Invalid server response' }));
+      const raw = await response.text();
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (e) {
+        console.error('[deploy] non-JSON response, status=' + response.status + ', body=', raw);
+        data = { success: false, error: 'Invalid server response (see console)' };
+      }
       if (!response.ok && !data.requires_action) {
         throw new Error(data.error || ('HTTP ' + response.status));
       }
