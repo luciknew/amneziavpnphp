@@ -456,6 +456,12 @@ Router::post('/servers/create', function () {
     $password = $_POST['password'] ?? '';
     // ssh_key handling
     $sshKey = trim($_POST['ssh_key'] ?? '');
+    // optional user-defined VPN UDP port (used for AWG family protocols)
+    $vpnPortRaw = $_POST['vpn_port'] ?? '';
+    $vpnPort = is_numeric($vpnPortRaw) ? (int) $vpnPortRaw : 0;
+    if ($vpnPort < 1 || $vpnPort > 65535) {
+        $vpnPort = null;
+    }
 
     $protocolSlug = $formData['install_protocol'] ?? $defaultProtocol;
     $protocolRecord = InstallProtocolManager::getBySlug($protocolSlug);
@@ -499,6 +505,7 @@ Router::post('/servers/create', function () {
             'vpn_subnet' => $vpnSubnet,
             'install_protocol' => $protocolSlug,
             'install_options' => $installOptions,
+            'vpn_port' => $vpnPort,
         ]);
 
         redirect('/servers/' . $serverId . '/deploy');

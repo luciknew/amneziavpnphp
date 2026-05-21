@@ -44,6 +44,11 @@
         <label class="block text-sm font-medium text-gray-700">SSH Port</label>
         <input name="port" data-field-manual type="number" value="{{ form_data.port ?? 22 }}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
       </div>
+      <div id="vpnPortRow">
+        <label class="block text-sm font-medium text-gray-700">VPN Port (UDP)</label>
+        <input name="vpn_port" id="vpnPortInput" data-field-manual type="number" min="1" max="65535" value="{{ form_data.vpn_port ?? '' }}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
+        <p class="mt-1 text-xs text-gray-500">Порт, который VPN-сервер слушает наружу (попадёт в клиентский конфиг как Endpoint). По умолчанию случайный — измените, если за одним NAT стоят несколько серверов.</p>
+      </div>
       <div>
         <label class="block text-sm font-medium text-gray-700">SSH Username</label>
         <input name="username" data-field-manual value="{{ form_data.username ?? 'root' }}" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md">
@@ -165,11 +170,27 @@ const protocolDescriptions = {{ protocol_map | json_encode | raw }};
 const protocolDescriptionEl = document.getElementById('protocolDescription');
 const protocolSelect = document.querySelector('select[name="install_protocol"]');
 
+const awgSlugs = ['awg2', 'amnezia-wg', 'amnezia-wg-advanced'];
+const vpnPortRow = document.getElementById('vpnPortRow');
+const vpnPortInput = document.getElementById('vpnPortInput');
+
+// Mimic Amnezia client behavior: suggest a random UDP port in 30000-65000
+function randomVpnPort() {
+  return Math.floor(Math.random() * (65000 - 30000 + 1)) + 30000;
+}
+if (vpnPortInput && !vpnPortInput.value) {
+  vpnPortInput.value = randomVpnPort();
+}
+
 function updateProtocolDescription() {
   if (!protocolSelect || !protocolDescriptionEl) return;
   const description = protocolDescriptions[protocolSelect.value] || '';
   protocolDescriptionEl.textContent = description;
   protocolDescriptionEl.style.display = description ? 'block' : 'none';
+  // Show VPN port input only for AWG-family protocols
+  if (vpnPortRow) {
+    vpnPortRow.style.display = awgSlugs.indexOf(protocolSelect.value) !== -1 ? 'block' : 'none';
+  }
 }
 
 function toggleAuthMethod() {

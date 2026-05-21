@@ -333,6 +333,14 @@ class InstallProtocolManager
             if (($protocol['slug'] ?? '') === 'xray-vless' && (!isset($options['server_port']) || !is_int($options['server_port']) || $options['server_port'] <= 0)) {
                 $options['server_port'] = 443;
             }
+            // Honor user-supplied vpn_port saved on the server record (e.g. AWG family behind NAT)
+            if (!isset($options['server_port']) || !is_int($options['server_port']) || $options['server_port'] <= 0) {
+                $serverData = $server->getData();
+                $presetPort = isset($serverData['vpn_port']) ? (int) $serverData['vpn_port'] : 0;
+                if ($presetPort > 0 && $presetPort <= 65535) {
+                    $options['server_port'] = $presetPort;
+                }
+            }
             if (!isset($options['server_port']) || !is_int($options['server_port'])) {
                 $options['server_port'] = self::chooseServerPort($server, $metadata);
             }

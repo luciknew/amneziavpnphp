@@ -105,10 +105,21 @@ class VpnServer
             $installOptions = trim($installOptions) === '' ? null : $installOptions;
         }
 
+        // Optional user-supplied VPN UDP port (validated upstream)
+        $vpnPortInput = $data['vpn_port'] ?? null;
+        if ($vpnPortInput !== null && $vpnPortInput !== '') {
+            $vpnPortInput = (int) $vpnPortInput;
+            if ($vpnPortInput < 1 || $vpnPortInput > 65535) {
+                $vpnPortInput = null;
+            }
+        } else {
+            $vpnPortInput = null;
+        }
+
         $stmt = $pdo->prepare('
-            INSERT INTO vpn_servers 
-            (user_id, name, host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO vpn_servers
+            (user_id, name, host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, vpn_port, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
 
         $stmt->execute([
@@ -123,6 +134,7 @@ class VpnServer
             $protocolSlug,
             $installOptions,
             $data['vpn_subnet'] ?? '10.8.1.0/24',
+            $vpnPortInput,
             'deploying'
         ]);
 
@@ -348,8 +360,9 @@ class VpnServer
             // Create directories
             $this->executeCommand('mkdir -p /opt/amnezia/amnezia-awg', true);
 
-            // Find free UDP port
-            $vpnPort = $this->findFreeUdpPort();
+            // Use user-supplied VPN port if set, otherwise pick a free one
+            $preset = isset($this->data['vpn_port']) ? (int) $this->data['vpn_port'] : 0;
+            $vpnPort = ($preset > 0 && $preset <= 65535) ? $preset : $this->findFreeUdpPort();
 
             // Create Dockerfile
             $this->createDockerfile();
