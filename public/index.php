@@ -573,6 +573,11 @@ Router::get('/servers/{id}/deploy', function ($params) {
 // Deploy server action (AJAX)
 Router::post('/servers/{id}/deploy', function ($params) {
     requireAuth();
+    // AWG install with first-time Docker pull/build can take several minutes.
+    // Keep PHP alive and ensure no stray output sneaks before the JSON body.
+    @set_time_limit(0);
+    @ignore_user_abort(true);
+    while (ob_get_level() > 0) { ob_end_clean(); }
     header('Content-Type: application/json');
 
     $serverId = (int) $params['id'];
