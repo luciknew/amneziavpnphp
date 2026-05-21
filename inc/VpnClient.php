@@ -797,15 +797,12 @@ class VpnClient
     private static function generateClientKeys(array $serverData, string $clientName): array
     {
         $containerName = $serverData['container_name'];
-        $protocolSlug = (string) ($serverData['install_protocol'] ?? '');
-        $isAwg2 = (stripos($containerName, 'awg2') !== false || $protocolSlug === 'awg2');
-        $wgTool = $isAwg2 ? 'awg' : 'wg';
-
+        // Detect actual tool inside container at runtime: prefer awg (AmneziaWG userspace),
+        // fall back to wg (legacy AmneziaVPN/amnezia-wg image). Avoid hardcoded slug-based
+        // routing which can mismatch when awg2 protocol falls back to builtin AWG image.
         $cmd = sprintf(
-            "docker exec -i %s sh -lc 'set -e; umask 077; priv=\$(%s genkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$priv\" ] || { echo empty_private_key; exit 1; }; pub=\$(printf " . '"' . "%%s\\n" . '"' . " \"\$priv\" | %s pubkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$pub\" ] || { echo empty_public_key; exit 1; }; printf " . '"' . "%%s\\n---\\n%%s\\n" . '"' . " \"\$priv\" \"\$pub\"'",
-            escapeshellarg($containerName),
-            $wgTool,
-            $wgTool
+            "docker exec -i %s sh -lc 'set -e; umask 077; WGTOOL=\$(command -v awg 2>/dev/null || command -v wg); [ -n \"\$WGTOOL\" ] || { echo no_wg_tool; exit 1; }; priv=\$(\"\$WGTOOL\" genkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$priv\" ] || { echo empty_private_key; exit 1; }; pub=\$(printf " . '"' . "%%s\\n" . '"' . " \"\$priv\" | \"\$WGTOOL\" pubkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$pub\" ] || { echo empty_public_key; exit 1; }; printf " . '"' . "%%s\\n---\\n%%s\\n" . '"' . " \"\$priv\" \"\$pub\"'",
+            escapeshellarg($containerName)
         );
 
         $escaped = escapeshellarg($cmd);
@@ -1213,9 +1210,16 @@ class VpnClient
             throw new Exception('Refusing to add client with empty public key');
         }
 
-        // Determine correct tool names (awg for AWG2, wg for standard)
+        // Determine correct tool names. Prefer awg/awg-quick if present in container,
+        // otherwise fall back to wg/wg-quick. This is needed because awg2 protocol
+        // sometimes installs via the legacy builtin AWG image which only ships wg.
         $wgTool = $isAwg2 ? 'awg' : 'wg';
         $wgQuickTool = $isAwg2 ? 'awg-quick' : 'wg-quick';
+        $detectedTool = trim(self::executeServerCommand($serverData, "docker exec -i {$containerName} sh -lc 'command -v {$wgTool} >/dev/null 2>&1 && echo {$wgTool} || (command -v wg >/dev/null 2>&1 && echo wg || (command -v awg >/dev/null 2>&1 && echo awg))'", true));
+        if ($detectedTool !== '') {
+            $wgTool = $detectedTool;
+            $wgQuickTool = ($wgTool === 'awg') ? 'awg-quick' : 'wg-quick';
+        }
 
         // 1. Create temp file for PSK (to avoid shell escaping issues)
         $pskFile = '/tmp/' . bin2hex(random_bytes(8)) . '.psk';
@@ -1551,7 +1555,10 @@ class VpnClient
             $configFile = 'wg0.conf';
         }
         $ifaceName = str_replace('.conf', '', $configFile);
+        // Detect actual tool inside the container (awg/wg may differ from slug-implied tool)
         $wgTool = $isAwg2 ? 'awg' : 'wg';
+        $detectedTool = trim(self::executeServerCommand($serverData, "docker exec -i {$containerName} sh -lc 'command -v {$wgTool} >/dev/null 2>&1 && echo {$wgTool} || (command -v wg >/dev/null 2>&1 && echo wg || (command -v awg >/dev/null 2>&1 && echo awg))'", true));
+        if ($detectedTool !== '') { $wgTool = $detectedTool; }
 
         // First, remove using wg/awg command (live removal)
         $removeCmd = sprintf(
@@ -1584,8 +1591,8 @@ class VpnClient
 
         self::executeServerCommand($serverData, $writeCmd, true);
 
-        // Save config
-        $wgQuickTool = $isAwg2 ? 'awg-quick' : 'wg-quick';
+        // Save config — pick *-quick matching the detected runtime tool
+        $wgQuickTool = ($wgTool === 'awg') ? 'awg-quick' : 'wg-quick';
         $saveCmd = sprintf("docker exec -i %s %s save %s", $containerName, $wgQuickTool, $ifaceName);
         self::executeServerCommand($serverData, $saveCmd, true);
 
