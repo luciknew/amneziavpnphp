@@ -6,8 +6,9 @@
 
 SCRIPT_PATH="/var/www/html/bin/collect_metrics.php"
 LOG_FILE="/var/log/metrics_monitor.log"
-PID_FILE="/var/run/collect_metrics.pid"
-LOCK_FILE="/var/run/collect_metrics.lock"
+# Use www-data-writable paths (was /var/run which is root-owned and broke cron-launched runs)
+PID_FILE="/var/www/html/logs/collect_metrics.pid"
+LOCK_FILE="/var/www/html/logs/collect_metrics.lock"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"

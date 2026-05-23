@@ -25,17 +25,23 @@ ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 ini_set('error_log', '/var/log/metrics_collector_errors.log');
 
-// Prevent multiple instances using flock (#42)
-$lockFile = '/var/run/collect_metrics.lock';
-$lockFp = fopen($lockFile, 'w');
-if (!$lockFp || !flock($lockFp, LOCK_EX | LOCK_NB)) {
-    echo "[" . date('Y-m-d H:i:s') . "] Another collector instance is already running. Exiting.\n";
+// Prevent multiple instances using flock (#42).
+// Use a path writable by both root (initial boot) and www-data (cron). /var/run is root-owned.
+$lockFile = '/var/www/html/logs/collect_metrics.lock';
+$pidFile  = '/var/www/html/logs/collect_metrics.pid';
+$lockFp = @fopen($lockFile, 'c');
+if (!$lockFp) {
+    echo "[" . date('Y-m-d H:i:s') . "] Cannot open lock file {$lockFile} (permission?). Exiting.\n";
+    exit(1);
+}
+if (!flock($lockFp, LOCK_EX | LOCK_NB)) {
+    echo "[" . date('Y-m-d H:i:s') . "] Another collector instance is already running (flock busy). Exiting.\n";
     exit(0);
 }
+@chmod($lockFile, 0666);
 
-// Write PID file for monitoring
-$pidFile = '/var/run/collect_metrics.pid';
 file_put_contents($pidFile, getmypid());
+@chmod($pidFile, 0666);
 
 // Register shutdown function to clean up PID and lock files
 register_shutdown_function(function() use ($pidFile, $lockFp, $lockFile) {
