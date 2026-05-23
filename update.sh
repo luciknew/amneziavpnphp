@@ -657,9 +657,12 @@ if [ "$CURRENT_COMMIT" != "$NEW_COMMIT" ]; then
 fi
 
 if [ $DOCKERFILE_CHANGED -eq 1 ]; then
-    log_info "Rebuilding web container..."
-    $DOCKER_COMPOSE build --no-cache web 2>&1 | tee -a "$LOG_FILE" | grep -v "^#"
-    
+    log_info "Rebuilding web container (this can take 3-5 minutes)..."
+    # NOTE: progress lines from BuildKit start with '#'. Don't strip them — the user
+    # was seeing a blank screen for the entire build. Stream raw output via tee.
+    # Using `--no-cache` only when Dockerfile/bin changed (DOCKERFILE_CHANGED above).
+    $DOCKER_COMPOSE build --no-cache web 2>&1 | tee -a "$LOG_FILE"
+
     log_info "Restarting all containers..."
     $DOCKER_COMPOSE down 2>&1 | tee -a "$LOG_FILE"
     $DOCKER_COMPOSE up -d 2>&1 | tee -a "$LOG_FILE"
@@ -697,9 +700,10 @@ else
     log_warning "Web container may not be fully ready"
 fi
 
-# Check if metrics collector is running
+# Check if metrics collector is running. PID file lives under logs/ now (was /var/run, root-owned)
+METRICS_PID_FILE="/var/www/html/logs/collect_metrics.pid"
 log_info "Checking metrics collector..."
-METRICS_PID=$($DOCKER_COMPOSE exec -T web cat /var/run/collect_metrics.pid 2>/dev/null || echo "")
+METRICS_PID=$($DOCKER_COMPOSE exec -T web cat "$METRICS_PID_FILE" 2>/dev/null || echo "")
 if [ -n "$METRICS_PID" ]; then
     if $DOCKER_COMPOSE exec -T web ps -p "$METRICS_PID" &>/dev/null; then
         log_success "Metrics collector is running (PID: $METRICS_PID)"
@@ -707,7 +711,7 @@ if [ -n "$METRICS_PID" ]; then
         log_warning "Metrics collector PID file exists but process not found, starting..."
         $DOCKER_COMPOSE exec -d web /bin/bash /var/www/html/bin/monitor_metrics.sh
         sleep 3
-        NEW_PID=$($DOCKER_COMPOSE exec -T web cat /var/run/collect_metrics.pid 2>/dev/null || echo "")
+        NEW_PID=$($DOCKER_COMPOSE exec -T web cat "$METRICS_PID_FILE" 2>/dev/null || echo "")
         if [ -n "$NEW_PID" ]; then
             log_success "Metrics collector started (PID: $NEW_PID)"
         fi
@@ -716,11 +720,11 @@ else
     log_warning "Metrics collector not running, starting now..."
     $DOCKER_COMPOSE exec -d web /bin/bash /var/www/html/bin/monitor_metrics.sh
     sleep 3
-    NEW_PID=$($DOCKER_COMPOSE exec -T web cat /var/run/collect_metrics.pid 2>/dev/null || echo "")
+    NEW_PID=$($DOCKER_COMPOSE exec -T web cat "$METRICS_PID_FILE" 2>/dev/null || echo "")
     if [ -n "$NEW_PID" ]; then
         log_success "Metrics collector started (PID: $NEW_PID)"
     else
-        log_warning "Failed to start metrics collector. Check: docker-compose exec web tail /var/log/metrics_monitor.log"
+        log_warning "Failed to start metrics collector. Check: docker compose exec web tail /var/log/metrics_monitor.log"
     fi
 fi
 
