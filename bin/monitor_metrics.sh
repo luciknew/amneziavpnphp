@@ -8,14 +8,16 @@ SCRIPT_PATH="/var/www/html/bin/collect_metrics.php"
 LOG_FILE="/var/log/metrics_monitor.log"
 # Use www-data-writable paths (was /var/run which is root-owned and broke cron-launched runs)
 PID_FILE="/var/www/html/logs/collect_metrics.pid"
-LOCK_FILE="/var/www/html/logs/collect_metrics.lock"
+# Monitor and collector MUST use different lock files. Otherwise the child PHP
+# inherits monitor's open fd with an active OFD lock and its own flock() races/fails.
+MONITOR_LOCK_FILE="/var/www/html/logs/metrics_monitor.lock"
 
 log_message() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-# Use flock to prevent multiple monitor instances
-exec 200>"$LOCK_FILE"
+# Use flock to prevent multiple monitor instances (separate file from collector!)
+exec 200>"$MONITOR_LOCK_FILE"
 if ! flock -n 200; then
     log_message "Another monitor instance is running, exiting"
     exit 0
@@ -41,10 +43,11 @@ is_running() {
     return 1
 }
 
-# Start the metrics collector
+# Start the metrics collector. Use setsid to detach into a new session and
+# explicitly close fd 200 in the child so it doesn't inherit our flock OFD.
 start_collector() {
     log_message "Starting metrics collector..."
-    /usr/local/bin/php "$SCRIPT_PATH" >> /var/log/metrics_collector.log 2>&1 &
+    setsid /usr/local/bin/php "$SCRIPT_PATH" >> /var/log/metrics_collector.log 2>&1 200>&- < /dev/null &
     echo $! > "$PID_FILE"
     log_message "Metrics collector started with PID: $(cat $PID_FILE)"
 }

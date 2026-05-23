@@ -193,9 +193,7 @@
       <form method="POST" action="/servers/{{ server.id }}/clients/create" class="space-y-3" id="createClientForm">
         <div>
           <input name="name" placeholder="{{ t('clients.name') }}" required class="w-full px-3 py-2 border rounded" id="clientName">
-        </div>
-        <div>
-          <input name="login" placeholder="Логин (уникально на сервере, пусто — из имени)" class="w-full px-3 py-2 border rounded" id="clientLogin">
+          {# Login is derived from name on the backend (VpnClient::create: $login ?: $name). Single field is enough. #}
         </div>
         <div>
           <label class="block text-sm text-gray-600 mb-1">{{ t('ai.protocol_type') }}</label>
