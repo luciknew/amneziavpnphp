@@ -22,6 +22,11 @@
     <div class="bg-white rounded shadow p-6">
       <form method="POST" action="" class="space-y-4" id="addClientForm">
         <div>
+          <label class="block text-sm text-gray-600 mb-1">{{ t('clients.name') }}</label>
+          <input name="name" placeholder="{{ t('clients.name') }}" required class="w-full px-3 py-2 border rounded" id="clientName">
+        </div>
+
+        <div>
           <label class="block text-sm text-gray-600 mb-1">{{ t('servers.title') | default('Server') }}</label>
           <select id="serverSelect" name="server_id" required class="w-full px-3 py-2 border rounded">
             <option value="" disabled selected>{{ t('common.select') | default('Select') }}...</option>
@@ -29,10 +34,6 @@
               <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
             {% endfor %}
           </select>
-        </div>
-
-        <div>
-          <input name="name" placeholder="{{ t('clients.name') }}" required class="w-full px-3 py-2 border rounded" id="clientName">
         </div>
 
         <div>
