@@ -1128,6 +1128,65 @@ Router::post('/servers/{id}/delete', function ($params) {
     }
 });
 
+// Clients list page with search + pagination
+Router::get('/clients', function () {
+    requireAuth();
+    $user = Auth::user();
+    $pdo = DB::conn();
+
+    $allowedPerPage = [20, 50, 75, 100];
+    $perPage = (int) ($_GET['per_page'] ?? 20);
+    if (!in_array($perPage, $allowedPerPage, true)) { $perPage = 20; }
+    $page = max(1, (int) ($_GET['page'] ?? 1));
+    $offset = ($page - 1) * $perPage;
+    $search = trim((string) ($_GET['q'] ?? ''));
+
+    // Admins see everyone's clients, regular users only their own
+    $isAdmin = Auth::isAdmin();
+    $where = [];
+    $bind = [];
+    if (!$isAdmin) {
+        $where[] = 'c.user_id = ?';
+        $bind[] = (int) $user['id'];
+    }
+    if ($search !== '') {
+        $where[] = 'c.name LIKE ?';
+        $bind[] = '%' . $search . '%';
+    }
+    $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+    // Total count for pagination
+    $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM vpn_clients c $whereSql");
+    $stmtCount->execute($bind);
+    $total = (int) $stmtCount->fetchColumn();
+    $totalPages = max(1, (int) ceil($total / $perPage));
+    if ($page > $totalPages) { $page = $totalPages; $offset = ($page - 1) * $perPage; }
+
+    // Page rows
+    $sql = "SELECT c.id, c.name, c.created_at, c.expires_at, c.status,
+                   s.name as server_name, s.host as server_host, s.id as server_id,
+                   p.name as protocol_name
+            FROM vpn_clients c
+            LEFT JOIN vpn_servers s ON s.id = c.server_id
+            LEFT JOIN protocols p ON p.id = c.protocol_id
+            $whereSql
+            ORDER BY c.created_at DESC
+            LIMIT $perPage OFFSET $offset";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($bind);
+    $clients = $stmt->fetchAll();
+
+    View::render('clients/index.twig', [
+        'clients'      => $clients,
+        'total'        => $total,
+        'page'         => $page,
+        'total_pages'  => $totalPages,
+        'per_page'     => $perPage,
+        'per_page_options' => $allowedPerPage,
+        'search'       => $search,
+    ]);
+});
+
 // Standalone "Add Client" page — choose server, then fill form. Submits to /servers/{id}/clients/create.
 Router::get('/clients/create', function () {
     requireAuth();

@@ -1,0 +1,119 @@
+{% extends "layout.twig" %}
+
+{% block title %}{{ t('menu.clients') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">
+      <i class="fas fa-users text-purple-600 mr-2"></i>
+      {{ t('menu.clients') }}
+      <span class="text-sm text-gray-500 font-normal ml-2">({{ total }})</span>
+    </h1>
+    <a href="/clients/create" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-flex items-center">
+      <i class="fas fa-user-plus mr-2"></i>{{ t('clients.add') }}
+    </a>
+  </div>
+
+  <form method="GET" action="/clients" class="bg-white rounded shadow p-4 mb-4 flex flex-wrap items-center gap-3">
+    <div class="flex-1 min-w-[200px]">
+      <input type="text" name="q" value="{{ search }}" placeholder="{{ t('clients.search_placeholder') }}"
+             class="w-full px-3 py-2 border rounded">
+    </div>
+    <div>
+      <label class="text-sm text-gray-600 mr-2">{{ t('clients.per_page') }}:</label>
+      <select name="per_page" onchange="this.form.submit()" class="px-3 py-2 border rounded">
+        {% for opt in per_page_options %}
+          <option value="{{ opt }}" {% if opt == per_page %}selected{% endif %}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="gradient-bg text-white px-4 py-2 rounded">
+      <i class="fas fa-search mr-1"></i>{{ t('common.search') }}
+    </button>
+    {% if search != '' %}
+      <a href="/clients?per_page={{ per_page }}" class="text-sm text-gray-500 hover:text-gray-700">{{ t('common.reset') }}</a>
+    {% endif %}
+  </form>
+
+  {% if clients|length == 0 %}
+    <div class="bg-white rounded shadow p-8 text-center text-gray-500">
+      {% if search != '' %}
+        {{ t('clients.no_results') }}
+      {% else %}
+        {{ t('clients.empty') }}
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="bg-white rounded shadow overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('clients.name') }}</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('servers.title') }}</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('ai.protocol_type') }}</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('clients.created_at') }}</th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{{ t('clients.expires') }}</th>
+            <th class="px-6 py-3"></th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          {% for c in clients %}
+          <tr>
+            <td class="px-6 py-3">
+              <a href="/clients/{{ c.id }}" class="text-purple-700 hover:underline font-medium">{{ c.name }}</a>
+              {% if c.status != 'active' %}
+                <span class="ml-2 inline-block text-xs px-2 py-0.5 rounded bg-gray-200 text-gray-700">{{ c.status }}</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-3">
+              {% if c.server_id %}
+                <a href="/servers/{{ c.server_id }}" class="text-gray-700 hover:underline">{{ c.server_name }}</a>
+                <div class="text-xs text-gray-400">{{ c.server_host }}</div>
+              {% else %}
+                <span class="text-gray-400">—</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-3 text-gray-700">{{ c.protocol_name | default('—') }}</td>
+            <td class="px-6 py-3 text-gray-700 whitespace-nowrap">{{ c.created_at }}</td>
+            <td class="px-6 py-3 text-gray-700 whitespace-nowrap">
+              {% if c.expires_at %}
+                {{ c.expires_at }}
+              {% else %}
+                <span class="text-gray-400">{{ t('clients.never_expires') }}</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-3 text-right">
+              <a href="/clients/{{ c.id }}" class="text-purple-600 hover:text-purple-800"><i class="fas fa-eye"></i></a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {# Pagination #}
+    {% if total_pages > 1 %}
+    {% set qs = '&per_page=' ~ per_page ~ (search != '' ? '&q=' ~ search : '') %}
+    <div class="flex items-center justify-between mt-4">
+      <div class="text-sm text-gray-600">
+        {{ t('common.showing') }} {{ (page - 1) * per_page + 1 }}–{{ page * per_page > total ? total : page * per_page }} / {{ total }}
+      </div>
+      <div class="flex items-center space-x-1">
+        <a href="?page=1{{ qs }}" class="px-3 py-1 border rounded text-sm {{ page == 1 ? 'text-gray-400 pointer-events-none' : 'text-gray-700 hover:bg-gray-100' }}">«</a>
+        <a href="?page={{ page > 1 ? page - 1 : 1 }}{{ qs }}" class="px-3 py-1 border rounded text-sm {{ page == 1 ? 'text-gray-400 pointer-events-none' : 'text-gray-700 hover:bg-gray-100' }}">‹</a>
+        {# Page numbers: show up to 7 windowed around current #}
+        {% set start = page - 3 < 1 ? 1 : page - 3 %}
+        {% set end   = start + 6 > total_pages ? total_pages : start + 6 %}
+        {% set start = end - 6 < 1 ? 1 : end - 6 %}
+        {% for p in start..end %}
+          <a href="?page={{ p }}{{ qs }}" class="px-3 py-1 border rounded text-sm {{ p == page ? 'gradient-bg text-white' : 'text-gray-700 hover:bg-gray-100' }}">{{ p }}</a>
+        {% endfor %}
+        <a href="?page={{ page < total_pages ? page + 1 : total_pages }}{{ qs }}" class="px-3 py-1 border rounded text-sm {{ page == total_pages ? 'text-gray-400 pointer-events-none' : 'text-gray-700 hover:bg-gray-100' }}">›</a>
+        <a href="?page={{ total_pages }}{{ qs }}" class="px-3 py-1 border rounded text-sm {{ page == total_pages ? 'text-gray-400 pointer-events-none' : 'text-gray-700 hover:bg-gray-100' }}">»</a>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
