@@ -1128,6 +1128,38 @@ Router::post('/servers/{id}/delete', function ($params) {
     }
 });
 
+// Standalone "Add Client" page — choose server, then fill form. Submits to /servers/{id}/clients/create.
+Router::get('/clients/create', function () {
+    requireAuth();
+    $user = Auth::user();
+    $pdo = DB::conn();
+
+    // Active servers belonging to the user (or all, for admin)
+    if (Auth::isAdmin()) {
+        $servers = VpnServer::listAll();
+    } else {
+        $servers = VpnServer::listByUser($user['id']);
+    }
+    $servers = array_values(array_filter($servers, function ($s) { return ($s['status'] ?? '') === 'active'; }));
+
+    // Pre-load protocols per server so the dropdown can swap without an extra round-trip
+    $serverProtocols = [];
+    if (!empty($servers)) {
+        $ids = array_map(function ($s) { return (int) $s['id']; }, $servers);
+        $in = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare("SELECT sp.server_id, sp.protocol_id, p.name, p.slug FROM server_protocols sp JOIN protocols p ON p.id = sp.protocol_id WHERE sp.server_id IN ($in) ORDER BY p.name");
+        $stmt->execute($ids);
+        foreach ($stmt->fetchAll() as $row) {
+            $serverProtocols[(int) $row['server_id']][] = $row;
+        }
+    }
+
+    View::render('clients/create.twig', [
+        'servers' => $servers,
+        'server_protocols' => $serverProtocols,
+    ]);
+});
+
 // Create client for server
 Router::post('/servers/{id}/clients/create', function ($params) {
     requireAuth();

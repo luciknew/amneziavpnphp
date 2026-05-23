@@ -1,0 +1,144 @@
+{% extends "layout.twig" %}
+
+{% block title %}{{ t('clients.add') | default('Add Client') }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold">
+      <i class="fas fa-user-plus text-green-600 mr-2"></i>
+      {{ t('clients.add') | default('Add Client') }}
+    </h1>
+    <a href="/dashboard" class="text-sm text-gray-500 hover:text-gray-700">
+      <i class="fas fa-arrow-left mr-1"></i> {{ t('common.back') | default('Back') }}
+    </a>
+  </div>
+
+  {% if servers|length == 0 %}
+    <div class="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-4">
+      {{ t('clients.no_active_servers') | default('No active servers. Add and deploy a server first.') }}
+    </div>
+  {% else %}
+    <div class="bg-white rounded shadow p-6">
+      <form method="POST" action="" class="space-y-4" id="addClientForm">
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">{{ t('servers.title') | default('Server') }}</label>
+          <select id="serverSelect" name="server_id" required class="w-full px-3 py-2 border rounded">
+            <option value="" disabled selected>{{ t('common.select') | default('Select') }}...</option>
+            {% for s in servers %}
+              <option value="{{ s.id }}">{{ s.name }} ({{ s.host }})</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <input name="name" placeholder="{{ t('clients.name') }}" required class="w-full px-3 py-2 border rounded" id="clientName">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">{{ t('ai.protocol_type') }}</label>
+          <select name="protocol_id" id="protocolSelect" class="w-full px-3 py-2 border rounded" disabled>
+            <option value="">--</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">{{ t('clients.expiration') }}</label>
+          <select name="expires_in_days" class="w-full px-3 py-2 border rounded mb-2" id="expirationSelect" onchange="toggleExpirationInput()">
+            <option value="" selected>{{ t('clients.never_expires') }}</option>
+            <option value="7">7 {{ t('common.days') }}</option>
+            <option value="30">30 {{ t('common.days') }}</option>
+            <option value="60">60 {{ t('common.days') }}</option>
+            <option value="90">90 {{ t('common.days') }}</option>
+            <option value="180">180 {{ t('common.days') }}</option>
+            <option value="365">365 {{ t('common.days') }}</option>
+            <option value="custom">{{ t('clients.custom_seconds') }}</option>
+          </select>
+          <input type="number" name="expires_in_seconds" id="expirationSeconds" class="w-full px-3 py-2 border rounded" placeholder="{{ t('clients.enter_seconds') }}" style="display:none;" min="1">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">{{ t('clients.traffic_limit') }}</label>
+          <select name="traffic_limit_gb" class="w-full px-3 py-2 border rounded mb-2" id="trafficSelect" onchange="toggleTrafficInput()">
+            <option value="" selected>{{ t('clients.unlimited') }}</option>
+            <option value="1">1 GB</option>
+            <option value="5">5 GB</option>
+            <option value="10">10 GB</option>
+            <option value="25">25 GB</option>
+            <option value="50">50 GB</option>
+            <option value="100">100 GB</option>
+            <option value="250">250 GB</option>
+            <option value="500">500 GB</option>
+            <option value="1000">1000 GB (1 TB)</option>
+            <option value="custom">{{ t('clients.custom_mb') }}</option>
+          </select>
+          <input type="number" name="traffic_limit_mb" id="trafficMegabytes" class="w-full px-3 py-2 border rounded" placeholder="{{ t('clients.enter_megabytes') }}" style="display:none;" min="1">
+        </div>
+
+        <button type="submit" class="gradient-bg text-white px-4 py-2 rounded w-full" id="submitBtn" disabled>
+          <span id="submitBtnText">{{ t('form.create') }}</span>
+          <i class="fas fa-spinner fa-spin" id="submitSpinner" style="display:none;"></i>
+        </button>
+      </form>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+// Server -> protocols map (pre-loaded server-side, no extra fetch needed)
+const SERVER_PROTOCOLS = {{ server_protocols | json_encode | raw }};
+
+const serverSelect = document.getElementById('serverSelect');
+const protoSelect = document.getElementById('protocolSelect');
+const submitBtn = document.getElementById('submitBtn');
+const form = document.getElementById('addClientForm');
+
+function refreshProtocols() {
+  const sid = serverSelect.value;
+  protoSelect.innerHTML = '';
+  const list = SERVER_PROTOCOLS[sid] || [];
+  if (list.length === 0) {
+    protoSelect.innerHTML = '<option value="">--</option>';
+    protoSelect.disabled = true;
+    submitBtn.disabled = true;
+    return;
+  }
+  list.forEach(function(p) {
+    const opt = document.createElement('option');
+    opt.value = p.protocol_id;
+    opt.textContent = p.name;
+    protoSelect.appendChild(opt);
+  });
+  protoSelect.disabled = false;
+  submitBtn.disabled = false;
+  // Form action points at the selected server's existing endpoint — no new backend logic
+  form.action = '/servers/' + sid + '/clients/create';
+}
+
+if (serverSelect) {
+  serverSelect.addEventListener('change', refreshProtocols);
+}
+
+function toggleExpirationInput() {
+  const sel = document.getElementById('expirationSelect');
+  const inp = document.getElementById('expirationSeconds');
+  inp.style.display = sel.value === 'custom' ? 'block' : 'none';
+  if (sel.value !== 'custom') inp.value = '';
+}
+
+function toggleTrafficInput() {
+  const sel = document.getElementById('trafficSelect');
+  const inp = document.getElementById('trafficMegabytes');
+  inp.style.display = sel.value === 'custom' ? 'block' : 'none';
+  if (sel.value !== 'custom') inp.value = '';
+}
+
+if (form) {
+  form.addEventListener('submit', function() {
+    submitBtn.disabled = true;
+    document.getElementById('submitBtnText').style.display = 'none';
+    document.getElementById('submitSpinner').style.display = 'inline-block';
+  });
+}
+</script>
+{% endblock %}
