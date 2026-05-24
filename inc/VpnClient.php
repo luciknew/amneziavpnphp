@@ -806,12 +806,13 @@ class VpnClient
         );
 
         $escaped = escapeshellarg($cmd);
+        $sshTarget = !empty($serverData['ssh_host']) ? $serverData['ssh_host'] : $serverData['host'];
         $sshCmd = sprintf(
             "sshpass -p %s ssh -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no %s@%s %s 2>&1",
             escapeshellarg($serverData['password']),
             $serverData['port'],
             $serverData['username'],
-            $serverData['host'],
+            $sshTarget,
             $escaped
         );
 
@@ -1309,14 +1310,16 @@ class VpnClient
             $command = "echo '{$serverData['password']}' | sudo -S -p '' " . $command;
         }
 
-        $run = static function (string $cmd) use ($serverData): string {
+        // SSH target: prefer ssh_host (NAT-side) if set, fall back to public host.
+        $sshTarget = !empty($serverData['ssh_host']) ? $serverData['ssh_host'] : ($serverData['host'] ?? '');
+        $run = static function (string $cmd) use ($serverData, $sshTarget): string {
             $escapedCommand = escapeshellarg($cmd);
             $sshCommand = sprintf(
                 "sshpass -p %s ssh  -p %d -q -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o PreferredAuthentications=password -o PubkeyAuthentication=no %s@%s %s 2>&1",
                 escapeshellarg($serverData['password']),
                 $serverData['port'],
                 $serverData['username'],
-                $serverData['host'],
+                $sshTarget,
                 $escapedCommand
             );
 

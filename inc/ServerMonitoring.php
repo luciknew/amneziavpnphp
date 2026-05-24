@@ -625,7 +625,8 @@ class ServerMonitoring
      */
     private function execSSH(string $cmd): ?string
     {
-        $host = $this->serverData['host'];
+        // Use ssh_host (private/NAT-side) for SSH, falling back to public host.
+        $host = !empty($this->serverData['ssh_host']) ? $this->serverData['ssh_host'] : $this->serverData['host'];
         $port = (int)$this->serverData['port'];
         $username = $this->serverData['username'];
         $sshKey = $this->serverData['ssh_key'] ?? '';
@@ -1107,12 +1108,12 @@ class ServerMonitoring
                 continue;
             }
             
-            // Build SSH command
-            $host = $serverData['host'];
+            // Build SSH command (use ssh_host if set; otherwise public host)
+            $host = !empty($serverData['ssh_host']) ? $serverData['ssh_host'] : $serverData['host'];
             $port = (int)($serverData['port'] ?? 22);
             $username = $serverData['username'] ?? 'root';
             $password = $serverData['password'] ?? '';
-            
+
             $xrayContainer = $isXrayServer ? $containerName : 'amnezia-xray';
             $cmd = "docker exec $xrayContainer xray api statsgetallonlineusers --server=127.0.0.1:10085";
             
@@ -1190,7 +1191,7 @@ class ServerMonitoring
         $isXrayServer = strpos($containerName, 'xray') !== false;
         
         if ($hasXrayClients || $isXrayServer) {
-            $host = $serverData['host'];
+            $host = !empty($serverData['ssh_host']) ? $serverData['ssh_host'] : $serverData['host'];
             $port = (int)($serverData['port'] ?? 22);
             $username = $serverData['username'] ?? 'root';
             $password = $serverData['password'] ?? '';

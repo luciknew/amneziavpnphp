@@ -37,8 +37,14 @@
         <p id="protocolDescription" class="mt-1 text-xs text-gray-500"></p>
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700">Host IP/Domain</label>
-        <input name="host" data-field-manual required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="123.456.789.0" value="{{ form_data.host ?? '' }}">
+        <label class="block text-sm font-medium text-gray-700">Host IP/Domain (for clients)</label>
+        <input name="host" data-field-manual required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="vpn.example.com or 1.2.3.4" value="{{ form_data.host ?? '' }}">
+        <p class="mt-1 text-xs text-gray-500">Публичный адрес VPN-сервера — попадёт в клиентский конфиг как Endpoint. Это то, куда подключаются клиенты.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">SSH Host <span class="text-gray-400 font-normal">(optional)</span></label>
+        <input name="ssh_host" data-field-manual class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="leave empty to reuse Host IP" value="{{ form_data.ssh_host ?? '' }}">
+        <p class="mt-1 text-xs text-gray-500">Адрес для SSH-подключения панели (для установки/управления). Заполните, если сервер за NAT и SSH доступен по другому адресу — иначе используется Host IP сверху.</p>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700">SSH Port</label>

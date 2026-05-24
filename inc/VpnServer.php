@@ -118,14 +118,16 @@ class VpnServer
 
         $stmt = $pdo->prepare('
             INSERT INTO vpn_servers
-            (user_id, name, host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, vpn_port, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (user_id, name, host, ssh_host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, vpn_port, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
 
+        $sshHost = isset($data['ssh_host']) ? trim((string) $data['ssh_host']) : '';
         $stmt->execute([
             $data['user_id'],
             $data['name'],
             $data['host'],
+            $sshHost !== '' ? $sshHost : null,
             $data['port'],
             $data['username'],
             $data['password'] ?? null,
@@ -420,6 +422,20 @@ class VpnServer
     }
 
     /**
+     * Host to connect over SSH for management. Falls back to public `host` when
+     * `ssh_host` is not set (covers servers that have one address for both clients
+     * and SSH). Servers behind NAT can set ssh_host to a private/Tailscale address.
+     */
+    public function getSshHost(): string
+    {
+        $sshHost = isset($this->data['ssh_host']) ? trim((string) $this->data['ssh_host']) : '';
+        if ($sshHost !== '') {
+            return $sshHost;
+        }
+        return (string) ($this->data['host'] ?? '');
+    }
+
+    /**
      * Test SSH connection to server
      */
     public function testConnection(): bool
@@ -442,7 +458,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host']
+                $this->getSshHost()
             );
         } else {
             $sshOptions .= " -o PreferredAuthentications=password -o PubkeyAuthentication=no";
@@ -452,7 +468,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host']
+                $this->getSshHost()
             );
         }
 
@@ -504,7 +520,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host'],
+                $this->getSshHost(),
                 $escapedCommand
             );
         } else {
@@ -524,7 +540,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host'],
+                $this->getSshHost(),
                 $escapedCommand
             );
         }
@@ -550,7 +566,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host'],
+                $this->getSshHost(),
                 $escapedBaseCommand
             );
             $output = shell_exec($sshCommandNoSudo) ?? '';
@@ -598,7 +614,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host'],
+                $this->getSshHost(),
                 $escapedCommand
             );
         } else {
@@ -613,7 +629,7 @@ class VpnServer
                 $this->data['port'],
                 $sshOptions,
                 $this->data['username'],
-                $this->data['host'],
+                $this->getSshHost(),
                 $escapedCommand
             );
         }

@@ -451,6 +451,7 @@ Router::post('/servers/create', function () {
 
     $name = trim($_POST['name'] ?? '');
     $host = trim($_POST['host'] ?? '');
+    $sshHost = trim($_POST['ssh_host'] ?? '');
     $port = (int) ($_POST['port'] ?? 22);
     $username = trim($_POST['username'] ?? 'root');
     $password = $_POST['password'] ?? '';
@@ -497,6 +498,7 @@ Router::post('/servers/create', function () {
             'user_id' => $user['id'],
             'name' => $name,
             'host' => $host,
+            'ssh_host' => $sshHost !== '' ? $sshHost : null,
             'port' => $port,
             'username' => $username,
             'password' => $password,
