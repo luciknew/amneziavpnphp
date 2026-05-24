@@ -1269,10 +1269,14 @@ class InstallProtocolManager
             'cloudflare-warp'       => 'warp',
             // X-Ray
             'xray-vless'            => 'xray',
-            // AWG variants
+            // AWG variants (builtin handler — PHP-side install via runAwgInstall)
             'amnezia-wg'            => 'awg',
             'amnezia-wg-advanced'   => 'awg',
             'awg2'                  => 'awg',
+            // Legacy AmneziaWG (separate from awg2) — uses install_script from DB.
+            // Force 'shell' handler so resolveHandler doesn't fall through to the
+            // amneziavpn/amnezia-wg regex heuristic below.
+            'amnezia-wg-legacy'     => 'shell',
         ];
 
         if (isset($slugMap[$slug])) {
@@ -1284,6 +1288,10 @@ class InstallProtocolManager
         $engine = $definition['engine'] ?? '';
         if ($engine === 'builtin_awg') {
             return 'awg';
+        }
+        // Explicit shell engine wins over install_script heuristics below.
+        if ($engine === 'shell') {
+            return 'shell';
         }
 
         // ── 3. Heuristic: AWG Docker image in install_script ──
