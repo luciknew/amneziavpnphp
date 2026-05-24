@@ -134,6 +134,31 @@ class VpnServer
     }
 
     /**
+     * Первый usable хост из CIDR-подсети (например "10.8.1.0/24" → "10.8.1.1/24").
+     * Нужно, чтобы навешивать на wg/awg-интерфейс корректный адрес, а не subnet (.0).
+     */
+    public static function firstHostFromSubnet(string $cidr): string
+    {
+        $cidr = trim($cidr);
+        if ($cidr === '' || strpos($cidr, '/') === false) {
+            return '10.8.1.1/24';
+        }
+        [$ip, $mask] = explode('/', $cidr, 2);
+        $mask = (int) $mask;
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) {
+            return '10.8.1.1/24';
+        }
+        $ipLong = ip2long($ip);
+        if ($ipLong === false) {
+            return '10.8.1.1/24';
+        }
+        $networkMask = $mask <= 0 ? 0 : (-1 << (32 - $mask)) & 0xFFFFFFFF;
+        $network = $ipLong & $networkMask;
+        $firstHost = $network + 1;
+        return long2ip($firstHost) . '/' . $mask;
+    }
+
+    /**
      * Какой хост подставлять клиентам в Endpoint конфига.
      * Возвращает client_host если задан, иначе fallback на ssh-host.
      */
@@ -678,16 +703,32 @@ class VpnServer
      */
     private function createDockerfile(): void
     {
+        // Multi-stage: на первом шаге собираем amneziawg-tools (awg, awg-quick),
+        // на втором — кладём поверх базового amnezia-wg образа.
+        // Без этого внутри контейнера нет AWG CLI и wg-quick не может применить Jc/Jmin/Jmax/S1..H4
+        // → интерфейс не поднимается, handshake невозможен.
         $dockerfile = <<<'DOCKERFILE'
+FROM alpine:3.19 AS awgtools
+
+RUN apk add --no-cache git make gcc musl-dev linux-headers bash
+RUN git clone --depth=1 https://github.com/amnezia-vpn/amneziawg-tools.git /src/awg-tools
+WORKDIR /src/awg-tools/src
+RUN make WITH_WGQUICK=yes && make WITH_WGQUICK=yes DESTDIR=/out install
+
 FROM amneziavpn/amnezia-wg:latest
 
 LABEL maintainer="AmneziaVPN"
 
-RUN apk add --no-cache bash curl dumb-init
+RUN apk add --no-cache bash curl dumb-init iptables ip6tables
 RUN apk --update upgrade --no-cache
 
+# Принести awg / awg-quick из stage awgtools
+COPY --from=awgtools /out/usr/bin/awg /usr/bin/awg
+COPY --from=awgtools /out/usr/bin/awg-quick /usr/bin/awg-quick
+RUN chmod +x /usr/bin/awg /usr/bin/awg-quick
+
 RUN mkdir -p /opt/amnezia
-RUN echo -e "#!/bin/bash\ntail -f /dev/null" > /opt/amnezia/start.sh
+COPY start.sh /opt/amnezia/start.sh
 RUN chmod a+x /opt/amnezia/start.sh
 
 ENTRYPOINT [ "dumb-init", "/opt/amnezia/start.sh" ]
@@ -708,6 +749,14 @@ DOCKERFILE;
 
 echo "Container startup"
 
+# Pick AWG tool if available, fall back to plain wg-quick (no obfuscation).
+if command -v awg-quick >/dev/null 2>&1; then
+    QUICK=awg-quick
+else
+    QUICK=wg-quick
+fi
+echo "Using $QUICK"
+
 # Wait for config if not exists yet
 for i in {1..30}; do
     if [ -f /opt/amnezia/awg/wg0.conf ]; then
@@ -717,12 +766,12 @@ for i in {1..30}; do
 done
 
 # Kill daemons in case of restart
-wg-quick down /opt/amnezia/awg/wg0.conf 2>/dev/null || true
+$QUICK down /opt/amnezia/awg/wg0.conf 2>/dev/null || true
 
 # Start daemons if configured
 if [ -f /opt/amnezia/awg/wg0.conf ]; then
-    wg-quick up /opt/amnezia/awg/wg0.conf
-    echo "WireGuard started"
+    $QUICK up /opt/amnezia/awg/wg0.conf
+    echo "WireGuard interface up"
 else
     echo "No wg0.conf found, skipping WireGuard startup"
 fi
@@ -821,10 +870,14 @@ BASH;
             'H4' => rand(100000, 2000000000)
         ];
 
+        // Address для интерфейса = первый usable хост подсети, а НЕ сам subnet (.0).
+        // wg-quick/awg-quick падает при попытке навесить subnet-адрес на интерфейс — поэтому AWG раньше не поднимался.
+        $serverIfaceAddress = self::firstHostFromSubnet((string) ($this->data['vpn_subnet'] ?? '10.8.1.0/24'));
+
         // Create wg0.conf
         $wgConfig = "[Interface]\n";
         $wgConfig .= "PrivateKey = {$privKey}\n";
-        $wgConfig .= "Address = {$this->data['vpn_subnet']}\n";
+        $wgConfig .= "Address = {$serverIfaceAddress}\n";
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         foreach ($awgParams as $key => $value) {
             $wgConfig .= "{$key} = {$value}\n";
@@ -838,8 +891,11 @@ BASH;
         // Create clientsTable
         $this->executeCommand("docker exec -i {$containerName} sh -c 'echo \"[]\" > /opt/amnezia/awg/clientsTable'", true);
 
-        // Start WireGuard
-        $this->executeCommand("docker exec -i {$containerName} wg-quick up /opt/amnezia/awg/wg0.conf 2>&1", true);
+        // Start WireGuard / AmneziaWG (awg-quick если есть — он понимает Jc/Jmin/Jmax/S1..H4).
+        $this->executeCommand(
+            "docker exec -i {$containerName} sh -lc 'if command -v awg-quick >/dev/null 2>&1; then awg-quick up /opt/amnezia/awg/wg0.conf; else wg-quick up /opt/amnezia/awg/wg0.conf; fi' 2>&1",
+            true
+        );
 
         // Apply firewall rules
         $this->executeCommand("docker exec -i {$containerName} sh -c 'iptables -A INPUT -i wg0 -j ACCEPT 2>/dev/null || true'", true);
