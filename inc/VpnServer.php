@@ -105,16 +105,20 @@ class VpnServer
             $installOptions = trim($installOptions) === '' ? null : $installOptions;
         }
 
+        $clientHost = trim((string) ($data['client_host'] ?? ''));
+        $clientHost = $clientHost !== '' ? $clientHost : null;
+
         $stmt = $pdo->prepare('
-            INSERT INTO vpn_servers 
-            (user_id, name, host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO vpn_servers
+            (user_id, name, host, client_host, port, username, password, ssh_key, container_name, install_protocol, install_options, vpn_subnet, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ');
 
         $stmt->execute([
             $data['user_id'],
             $data['name'],
             $data['host'],
+            $clientHost,
             $data['port'],
             $data['username'],
             $data['password'] ?? null,
@@ -127,6 +131,19 @@ class VpnServer
         ]);
 
         return (int) $pdo->lastInsertId();
+    }
+
+    /**
+     * Какой хост подставлять клиентам в Endpoint конфига.
+     * Возвращает client_host если задан, иначе fallback на ssh-host.
+     */
+    public static function effectiveClientHost(array $serverData): string
+    {
+        $client = trim((string) ($serverData['client_host'] ?? ''));
+        if ($client !== '') {
+            return $client;
+        }
+        return (string) ($serverData['host'] ?? '');
     }
 
     /**

@@ -37,8 +37,14 @@
         <p id="protocolDescription" class="mt-1 text-xs text-gray-500"></p>
       </div>
       <div>
-        <label class="block text-sm font-medium text-gray-700">Host IP/Domain</label>
+        <label class="block text-sm font-medium text-gray-700">Host IP/Domain (SSH)</label>
         <input name="host" data-field-manual required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="123.456.789.0" value="{{ form_data.host ?? '' }}">
+        <p class="mt-1 text-xs text-gray-500">Адрес, по которому панель ходит на сервер по SSH (внутренний/VPN/Tailscale IP — любой, доступный панели).</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700">Host IP/Domain (для клиентов)</label>
+        <input name="client_host" data-field-manual class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="например, public.example.com или 1.2.3.4" value="{{ form_data.client_host ?? '' }}">
+        <p class="mt-1 text-xs text-gray-500">Адрес, который попадёт в конфиги клиентов как Endpoint. Заполнять, если сервер за NAT и SSH-адрес отличается от клиентского. Пусто = использовать SSH-адрес.</p>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700">SSH Port</label>

@@ -182,7 +182,7 @@ class VpnClient
                 'client_ip' => $clientIP,
                 'server_public_key' => $serverData['server_public_key'],
                 'preshared_key' => $serverData['preshared_key'],
-                'server_host' => $serverData['host'],
+                'server_host' => VpnServer::effectiveClientHost($serverData),
                 'server_port' => $serverData['vpn_port'],
                 'dns_servers' => $serverData['dns_servers'] ?? '1.1.1.1, 1.0.0.1',
             ];
@@ -236,7 +236,7 @@ class VpnClient
                     $clientIP,
                     $serverData['server_public_key'],
                     $serverData['preshared_key'],
-                    $serverData['host'],
+                    VpnServer::effectiveClientHost($serverData),
                     $serverData['vpn_port'],
                     is_array($awgParams) ? $awgParams : [],
                     $slug
@@ -253,7 +253,7 @@ class VpnClient
             $vars = [];
             $vars['private_key'] = '';
             $vars['client_ip'] = $clientIP;
-            $vars['server_host'] = $serverData['host'] ?? '';
+            $vars['server_host'] = VpnServer::effectiveClientHost($serverData);
             $vars['server_port'] = $serverData['vpn_port'] ?? '';
             $extras = [];
             if ($protocolId) {
@@ -544,10 +544,10 @@ class VpnClient
                     }
 
                     if ($binaryPath !== null) {
-                        $serverHost = !empty($vars['server_host']) ? (string) $vars['server_host'] : ($serverData['host'] ?? '');
+                        $serverHost = !empty($vars['server_host']) ? (string) $vars['server_host'] : VpnServer::effectiveClientHost($serverData);
                         $serverPort = !empty($vars['server_port']) ? (int) $vars['server_port'] : (int) ($serverData['vpn_port'] ?? 443);
                         if ($serverHost === '') {
-                            $serverHost = $serverData['host'] ?? '';
+                            $serverHost = VpnServer::effectiveClientHost($serverData);
                         }
                         if ($serverPort <= 0) {
                             $serverPort = 443;
@@ -728,7 +728,8 @@ class VpnClient
         $presharedKey = $clientData['preshared_key'] ?? ($serverData['preshared_key'] ?? '');
         $config = $clientData['config'] ?? '';
 
-        if ($config === '' && !empty($serverData['server_public_key']) && !empty($serverData['host']) && !empty($serverData['vpn_port'])) {
+        $clientFacingHost = VpnServer::effectiveClientHost($serverData);
+        if ($config === '' && !empty($serverData['server_public_key']) && $clientFacingHost !== '' && !empty($serverData['vpn_port'])) {
             $awgParams = json_decode($serverData['awg_params'] ?? '{}', true);
             if (!is_array($awgParams)) {
                 $awgParams = [];
@@ -738,7 +739,7 @@ class VpnClient
                 $clientIp,
                 $serverData['server_public_key'],
                 $presharedKey,
-                $serverData['host'],
+                $clientFacingHost,
                 (int) $serverData['vpn_port'],
                 $awgParams,
                 (string) ($serverData['install_protocol'] ?? '')
@@ -1424,7 +1425,7 @@ class VpnClient
             return '';
         }
         $serverPub = (string) ($serverData['server_public_key'] ?? '');
-        $host = (string) ($serverData['host'] ?? '');
+        $host = VpnServer::effectiveClientHost($serverData);
         $port = (int) ($serverData['vpn_port'] ?? 0);
         if ($serverPub === '' || $host === '' || $port <= 0) {
             return '';
@@ -1905,7 +1906,7 @@ class VpnClient
             'client_ip' => $clientIP,
             'server_public_key' => (string) ($serverData['server_public_key'] ?? ''),
             'preshared_key' => $presharedKeyForConfig,
-            'server_host' => (string) ($serverData['host'] ?? ''),
+            'server_host' => VpnServer::effectiveClientHost($serverData),
             'server_port' => (string) ((int) ($serverData['vpn_port'] ?? 0)),
             'dns_servers' => (string) ($serverData['dns_servers'] ?? '1.1.1.1, 1.0.0.1'),
         ];
@@ -1940,7 +1941,7 @@ class VpnClient
                 $clientIP,
                 (string) ($serverData['server_public_key'] ?? ''),
                 $presharedKeyForConfig,
-                (string) ($serverData['host'] ?? ''),
+                VpnServer::effectiveClientHost($serverData),
                 (int) ($serverData['vpn_port'] ?? 0),
                 $awgParams,
                 $slug

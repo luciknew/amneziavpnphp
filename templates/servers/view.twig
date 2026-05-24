@@ -43,7 +43,12 @@
 <div class="max-w-7xl mx-auto px-4 py-8">
   <div class="mb-6">
     <h1 class="text-3xl font-bold">{{ server.name }}</h1>
-    <p class="text-gray-600">{{ server.host }}</p>
+    <p class="text-gray-600">
+      SSH: {{ server.host }}
+      {% if server.client_host %}
+        · клиентам: <span class="font-medium">{{ server.client_host }}</span>
+      {% endif %}
+    </p>
   </div>
   
   {% if import_message %}

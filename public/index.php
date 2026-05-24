@@ -451,6 +451,7 @@ Router::post('/servers/create', function () {
 
     $name = trim($_POST['name'] ?? '');
     $host = trim($_POST['host'] ?? '');
+    $clientHost = trim($_POST['client_host'] ?? '');
     $port = (int) ($_POST['port'] ?? 22);
     $username = trim($_POST['username'] ?? 'root');
     $password = $_POST['password'] ?? '';
@@ -491,6 +492,7 @@ Router::post('/servers/create', function () {
             'user_id' => $user['id'],
             'name' => $name,
             'host' => $host,
+            'client_host' => $clientHost,
             'port' => $port,
             'username' => $username,
             'password' => $password,
