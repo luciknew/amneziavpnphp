@@ -1117,58 +1117,33 @@ class VpnClient
         array $awgParams,
         string $protocolSlug = ''
     ): string {
-        // Get default parameters for the protocol
-        $defaultParams = self::getAwgParamDefaults($protocolSlug);
-        
-        // Normalize $awgParams keys to uppercase for consistency
-        $normalizedAwgParams = [];
+        // Normalize $awgParams keys to uppercase for consistency.
+        // Drop empty values — they only confuse the client (e.g. I2= without a value).
+        $serverParams = [];
         foreach ($awgParams as $k => $v) {
-            $normalizedAwgParams[strtoupper($k)] = $v;
-        }
-        
-        // Server values are the source of truth. Override defaults with whatever
-        // the server's wg0.conf actually has. AmneziaWG spec stores H1-H4 as plain
-        // uint32 integers; older panel code expected "X-Y" range format which is wrong.
-        $finalParams = $defaultParams;
-        foreach ($normalizedAwgParams as $key => $value) {
-            $upperKey = strtoupper($key);
-            // Empty strings count as "no value" so default isn't accidentally wiped.
-            if ($value === '' || $value === null) {
+            if ($v === '' || $v === null) {
                 continue;
             }
-            $finalParams[$upperKey] = $value;
+            $serverParams[strtoupper($k)] = $v;
         }
-        
-        // Match the format the standalone AmneziaWG app expects (works as a
-        // verified reference config). Key differences from the older client conf:
-        //   - Address uses /24 so the client interface can route the whole VPN subnet
-        //   - Single DNS (1.1.1.1) instead of two — matches reference; both formats
-        //     are valid for wg-quick, but standalone app expects the trimmer one.
+
         $config = "[Interface]\n";
         $config .= "PrivateKey = {$privateKey}\n";
         $config .= "Address = {$clientIP}/24\n";
         $config .= "DNS = 1.1.1.1\n";
 
-        // Add AWG parameters (in the order used by Amnezia app)
-        // For awg2 include I1-I5, S3, S4; for regular awg only H1-H4, Jc, Jmin, Jmax, S1, S2
-        // Order: Jc, Jmin, Jmax, S1, S2, S3, S4, H1, H2, H3, H4, I1, I2, I3, I4, I5
-        $paramKeys = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4'];
-        if ($protocolSlug === 'awg2') {
-            $paramKeys = array_merge($paramKeys, ['I1', 'I2', 'I3', 'I4', 'I5']);
-        }
-        
-        foreach ($paramKeys as $key) {
-            $value = null;
-            if (isset($finalParams[$key])) {
-                $value = $finalParams[$key];
-            } elseif (isset($finalParams[strtoupper($key)])) {
-                $value = $finalParams[strtoupper($key)];
+        // Emit ONLY parameters that the server actually has in its wg0.conf.
+        // If we add params the server doesn't know about (e.g. S3/S4/I1 on a
+        // legacy AmneziaWG server), the client sends extra obfuscation the
+        // server can't handle — handshake may pass but tunnel data gets dropped.
+        // Order chosen to match the reference standalone AmneziaWG config.
+        $paramOrder = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4', 'I1', 'I2', 'I3', 'I4', 'I5'];
+        foreach ($paramOrder as $key) {
+            $upperKey = strtoupper($key);
+            if (!array_key_exists($upperKey, $serverParams)) {
+                continue;
             }
-            
-            // Always add parameter if it's defined (even if empty for I2-I5)
-            if ($value !== null) {
-                $config .= "{$key} = {$value}\n";
-            }
+            $config .= "{$key} = {$serverParams[$upperKey]}\n";
         }
 
         // [Peer] in the order matching the reference standalone AmneziaWG config:
