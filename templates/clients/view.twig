@@ -168,6 +168,29 @@
   </div>
   {% endif %}
 
+  {% if is_awg2 and client.config %}
+  <div class="bg-white rounded shadow p-6 mt-6">
+    <h3 class="font-bold mb-4 flex items-center justify-between">
+      <span>WireGuard Config (text)</span>
+      <button type="button" onclick="copyAwgConf(this)" class="text-sm text-purple-600 hover:text-purple-800">
+        <i class="far fa-copy mr-1"></i>Copy
+      </button>
+    </h3>
+    <pre id="awgConfText" class="bg-gray-100 p-4 rounded text-xs overflow-x-auto whitespace-pre-wrap">{{ client.config }}</pre>
+    <p class="text-xs text-gray-500 mt-2">Plain .conf for AmneziaWG / WireGuard apps — can be pasted manually or saved as a file.</p>
+  </div>
+  <script>
+    function copyAwgConf(btn) {
+      const txt = document.getElementById('awgConfText').textContent;
+      navigator.clipboard.writeText(txt).then(() => {
+        const old = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
+        setTimeout(() => { btn.innerHTML = old; }, 1500);
+      });
+    }
+  </script>
+  {% endif %}
+
   {% if is_awg2 and vpn_url_config %}
   <div class="bg-white rounded shadow p-6 mt-6">
     <h3 class="font-bold mb-4">VPN URL Configuration</h3>

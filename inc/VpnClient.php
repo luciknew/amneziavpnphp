@@ -1139,10 +1139,15 @@ class VpnClient
             $finalParams[$upperKey] = $value;
         }
         
+        // Match the format the standalone AmneziaWG app expects (works as a
+        // verified reference config). Key differences from the older client conf:
+        //   - Address uses /24 so the client interface can route the whole VPN subnet
+        //   - Single DNS (1.1.1.1) instead of two — matches reference; both formats
+        //     are valid for wg-quick, but standalone app expects the trimmer one.
         $config = "[Interface]\n";
-        $config .= "Address = {$clientIP}/32\n";
-        $config .= "DNS = 1.1.1.1, 1.0.0.1\n";
         $config .= "PrivateKey = {$privateKey}\n";
+        $config .= "Address = {$clientIP}/24\n";
+        $config .= "DNS = 1.1.1.1\n";
 
         // Add AWG parameters (in the order used by Amnezia app)
         // For awg2 include I1-I5, S3, S4; for regular awg only H1-H4, Jc, Jmin, Jmax, S1, S2
@@ -1166,12 +1171,15 @@ class VpnClient
             }
         }
 
+        // [Peer] in the order matching the reference standalone AmneziaWG config:
+        //   PublicKey, PresharedKey, AllowedIPs, PersistentKeepalive, Endpoint.
+        // AllowedIPs without ::/0 (IPv6 inside tunnel) — server typically lacks v6.
         $config .= "\n[Peer]\n";
         $config .= "PublicKey = {$serverPublicKey}\n";
         $config .= "PresharedKey = {$presharedKey}\n";
+        $config .= "AllowedIPs = 0.0.0.0/0\n";
+        $config .= "PersistentKeepalive = 0\n";
         $config .= "Endpoint = {$serverHost}:{$serverPort}\n";
-        $config .= "AllowedIPs = 0.0.0.0/0, ::/0\n";
-        $config .= "PersistentKeepalive = 25\n\n";
 
         return $config;
     }
