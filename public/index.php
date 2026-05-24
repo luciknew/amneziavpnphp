@@ -1343,15 +1343,20 @@ Router::get('/clients/{id}', function ($params) {
             }
             
             // Generate second QR code and vpn:// config for AWG2
+            $qrCodePlainConf = '';
             if ($isAwg2 && !empty($clientData['config'])) {
                 try {
                     $qrCodeVpnUrl = VpnClient::generateQRCodeVpnUrl($clientData['config'], 'awg2');
-                    
+
                     // Generate vpn:// URL string using vpn:// format (JSON + zlib)
                     require_once __DIR__ . '/../inc/QrUtil.php';
                     $vpnUrlConfig = 'vpn://' . QrUtil::encodeVpnUrlConf($clientData['config'], 'awg2');
+
+                    // Third QR: raw plain-text .conf. This is the format the standalone
+                    // AmneziaWG app and standard WireGuard apps expect (no wrapping).
+                    $qrCodePlainConf = QrUtil::pngBase64($clientData['config']);
                 } catch (Exception $e) {
-                    // Ignore errors, just don't show the second QR
+                    // Ignore errors, just don't show the extra QR codes
                 }
             }
         } catch (Exception $e) {
@@ -1361,6 +1366,7 @@ Router::get('/clients/{id}', function ($params) {
             'client' => $clientData,
             'protocol_output' => $protocolOutput,
             'qr_code_vpn_url' => $qrCodeVpnUrl,
+            'qr_code_plain_conf' => $qrCodePlainConf,
             'vpn_url_config' => $vpnUrlConfig,
             'is_awg2' => $isAwg2
         ]);
