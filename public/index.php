@@ -1365,6 +1365,84 @@ Router::get('/clients/{id}/download', function ($params) {
     }
 });
 
+// Скачать конфиг для приложения AmneziaVPN в виде .vpn-файла (текст со строкой vpn://…).
+Router::get('/clients/{id}/download-vpn', function ($params) {
+    requireAuth();
+
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    $clientId = (int) $params['id'];
+
+    try {
+        $client = new VpnClient($clientId);
+        $clientData = $client->getData();
+
+        // Check ownership
+        $user = Auth::user();
+        if ($clientData['user_id'] != $user['id'] && !Auth::isAdmin()) {
+            http_response_code(403);
+            echo 'Forbidden';
+            return;
+        }
+
+        // Берём INI из исходных полей БД, при необходимости с фолбэком на хранимый client.config.
+        $ini = $client->buildIniConfigFromData();
+        if ($ini === '') {
+            $ini = (string) ($clientData['config'] ?? '');
+        }
+        if ($ini === '' || stripos($ini, '[Interface]') === false) {
+            http_response_code(409);
+            echo 'No WireGuard/AWG config available for this client';
+            return;
+        }
+
+        // Определяем slug, чтобы корректно построить envelope (awg2 / прочие AWG).
+        $protocolSlug = '';
+        try {
+            $pdo = DB::conn();
+            $pid = (int) ($clientData['protocol_id'] ?? 0);
+            if ($pid > 0) {
+                $st = $pdo->prepare('SELECT slug FROM protocols WHERE id = ? LIMIT 1');
+                $st->execute([$pid]);
+                $protocolSlug = (string) ($st->fetchColumn() ?: '');
+            }
+            if ($protocolSlug === '') {
+                $srv = $pdo->prepare('SELECT install_protocol FROM vpn_servers WHERE id = ? LIMIT 1');
+                $srv->execute([(int) $clientData['server_id']]);
+                $protocolSlug = (string) ($srv->fetchColumn() ?: '');
+            }
+        } catch (Exception $e) {
+            // не критично — encodeVpnUrlConf переживает пустой slug
+        }
+
+        require_once __DIR__ . '/../inc/QrUtil.php';
+        try {
+            $vpnUrl = 'vpn://' . QrUtil::encodeVpnUrlConf($ini, $protocolSlug);
+        } catch (Throwable $e) {
+            http_response_code(500);
+            echo 'Failed to build vpn:// URL: ' . htmlspecialchars($e->getMessage());
+            return;
+        }
+
+        $baseName = !empty($clientData['login']) ? $clientData['login'] : $clientData['name'];
+        $safeName = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $baseName);
+        if ($safeName === '') {
+            $safeName = 'user_' . $clientData['id'] . '_s' . $clientData['server_id'];
+        }
+        $filename = $safeName . '.vpn';
+
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Length: ' . strlen($vpnUrl));
+        echo $vpnUrl;
+    } catch (Exception $e) {
+        http_response_code(404);
+        echo 'Client not found';
+    }
+});
+
 // Debug: one-shot AWG advanced smoke test (requires session auth)
 // Usage example (while logged in): /debug/awg-smoke?server_id=5&client_name=olegnew14&duration_seconds=10
 Router::get('/debug/awg-smoke', function () {

@@ -21,10 +21,8 @@
         <div><dt class="text-sm text-gray-600">Логин</dt><dd>{{ client.name|default('') }}</dd></div>
         <div><dt class="text-sm text-gray-600">{{ t('common.created') }}</dt><dd>{{ client.created_at }}</dd></div>
       </dl>
+      {# Скачивание конфигов перенесено к соответствующим QR-блокам ниже (каждая кнопка рядом со своим QR). #}
       <div class="flex gap-2">
-        <a href="/clients/{{ client.id }}/download" class="gradient-bg text-white px-4 py-2 rounded">
-          <i class="fas fa-download"></i> Download Config
-        </a>
         {% if client.status == 'active' %}
           <form method="POST" action="/clients/{{ client.id }}/revoke" style="display:inline;">
             <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded" onclick="return confirm('Revoke access for this client?')">
@@ -151,6 +149,9 @@
     <h3 class="font-bold mb-4">QR Code — AmneziaVPN</h3>
     <img src="{{ qr_code_vpn_url }}" alt="QR Code AmneziaVPN" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
     <p class="text-sm text-gray-600 mt-2">Scan with the <strong>AmneziaVPN</strong> app</p>
+    <a href="/clients/{{ client.id }}/download-vpn" class="inline-block mt-3 px-4 py-2 bg-gray-800 text-white rounded text-sm">
+      <i class="fas fa-download"></i> Download .vpn
+    </a>
   </div>
   {% endif %}
 
@@ -165,15 +166,7 @@
   </div>
   {% endif %}
 
-  {% if is_awg2 and vpn_url_config %}
-  <div class="bg-white rounded shadow p-6 mt-6">
-    <h3 class="font-bold mb-4">VPN URL Configuration</h3>
-    <div class="bg-gray-100 p-4 rounded text-left overflow-x-auto">
-      <code class="text-sm break-all">{{ vpn_url_config }}</code>
-    </div>
-    <p class="text-sm text-gray-600 mt-2">Copy this vpn:// URL to import configuration</p>
-  </div>
-  {% endif %}
+  {# Текстовый блок «VPN URL Configuration» убран — содержимое и так доступно через QR и кнопку Download .vpn. #}
 
   {% if protocol_output and client.show_text_content %}
   <div class="bg-white rounded shadow p-6 mt-6">
