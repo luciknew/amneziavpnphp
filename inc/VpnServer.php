@@ -832,17 +832,26 @@ BASH;
         $this->executeCommand("docker exec -i {$containerName} sh -c 'iptables -t nat -A POSTROUTING -s 10.8.1.0/24 -o eth0 -j MASQUERADE 2>/dev/null || true'", true);
 
         // Ensure host-level forwarding/NAT for AWG subnet as well (required on some Docker host setups).
+        // Сначала отдельным вызовом узнаём имя дефолтного интерфейса — иначе при подстановке
+        // через PHP double-quoted строку `$IFACE` интерпретировался самим PHP, а не shell-ом.
         $vpnSubnet = (string) ($this->data['vpn_subnet'] ?? '10.8.1.0/24');
         $vpnSubnetEsc = escapeshellarg($vpnSubnet);
-        $hostNatCmd = "bash -lc 'IFACE=\\$(ip route | awk \"{if (\\$1==\\\"default\\\") {print \\$5; exit}}\"); " .
-            "iptables -t nat -C POSTROUTING -s " . $vpnSubnetEsc . " -o \\\"\\$IFACE\\\" -j MASQUERADE 2>/dev/null || " .
-            "iptables -t nat -I POSTROUTING 1 -s " . $vpnSubnetEsc . " -o \\\"\\$IFACE\\\" -j MASQUERADE; " .
-            "iptables -C FORWARD -s " . $vpnSubnetEsc . " -o \\\"\\$IFACE\\\" -j ACCEPT 2>/dev/null || " .
-            "iptables -I FORWARD 1 -s " . $vpnSubnetEsc . " -o \\\"\\$IFACE\\\" -j ACCEPT; " .
-            "iptables -C FORWARD -d " . $vpnSubnetEsc . " -m conntrack --ctstate RELATED,ESTABLISHED -i \\\"\\$IFACE\\\" -j ACCEPT 2>/dev/null || " .
-            "iptables -I FORWARD 1 -d " . $vpnSubnetEsc . " -m conntrack --ctstate RELATED,ESTABLISHED -i \\\"\\$IFACE\\\" -j ACCEPT; " .
-            "sysctl -w net.ipv4.ip_forward=1 >/dev/null'";
-        $this->executeCommand($hostNatCmd, true);
+        $iface = trim((string) $this->executeCommand(
+            "ip route | awk '{if (\$1==\"default\") {print \$5; exit}}'",
+            true
+        ));
+        if ($iface !== '' && preg_match('/^[A-Za-z0-9._@-]+$/', $iface)) {
+            $ifaceEsc = escapeshellarg($iface);
+            $hostNatCmd =
+                "iptables -t nat -C POSTROUTING -s {$vpnSubnetEsc} -o {$ifaceEsc} -j MASQUERADE 2>/dev/null || " .
+                "iptables -t nat -I POSTROUTING 1 -s {$vpnSubnetEsc} -o {$ifaceEsc} -j MASQUERADE; " .
+                "iptables -C FORWARD -s {$vpnSubnetEsc} -o {$ifaceEsc} -j ACCEPT 2>/dev/null || " .
+                "iptables -I FORWARD 1 -s {$vpnSubnetEsc} -o {$ifaceEsc} -j ACCEPT; " .
+                "iptables -C FORWARD -d {$vpnSubnetEsc} -m conntrack --ctstate RELATED,ESTABLISHED -i {$ifaceEsc} -j ACCEPT 2>/dev/null || " .
+                "iptables -I FORWARD 1 -d {$vpnSubnetEsc} -m conntrack --ctstate RELATED,ESTABLISHED -i {$ifaceEsc} -j ACCEPT; " .
+                "sysctl -w net.ipv4.ip_forward=1 >/dev/null";
+            $this->executeCommand($hostNatCmd, true);
+        }
 
         sleep(2);
 

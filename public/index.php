@@ -566,6 +566,15 @@ Router::get('/servers/{id}/deploy', function ($params) {
 // Deploy server action (AJAX)
 Router::post('/servers/{id}/deploy', function ($params) {
     requireAuth();
+
+    // Глушим warning/notice в выводе — иначе ломают JSON и фронт получает "Invalid server response".
+    @ini_set('display_errors', '0');
+    error_reporting(0);
+    while (ob_get_level()) {
+        @ob_end_clean();
+    }
+    ob_start();
+
     header('Content-Type: application/json');
 
     $serverId = (int) $params['id'];
@@ -600,9 +609,11 @@ Router::post('/servers/{id}/deploy', function ($params) {
         if (!isset($result['success']) && empty($result['requires_action'])) {
             $result['success'] = true;
         }
+        while (ob_get_level() > 0) { @ob_end_clean(); }
         echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     } catch (Exception $e) {
         http_response_code(500);
+        while (ob_get_level() > 0) { @ob_end_clean(); }
         echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     }
 });
