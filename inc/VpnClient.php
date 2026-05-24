@@ -895,6 +895,9 @@ class VpnClient
      */
     private static function getAwgParamDefaults(string $protocolSlug = ''): array
     {
+        // AmneziaWG params per spec: H1-H4 are single uint32 magic-header values.
+        // Defaults here are only a safety net — real values come from the server's
+        // wg0.conf via extractAwgParamsFromWg0Conf() and override these.
         if ($protocolSlug === 'awg2') {
             return [
                 'JC' => 5,
@@ -904,10 +907,10 @@ class VpnClient
                 'S2' => 125,
                 'S3' => 13,
                 'S4' => 9,
-                'H1' => '1443912531-1981073285',
-                'H2' => '1984025557-2135018048',
-                'H3' => '2145217268-2146643749',
-                'H4' => '2146790761-2146860793',
+                'H1' => 1,
+                'H2' => 2,
+                'H3' => 3,
+                'H4' => 4,
                 'I1' => '<r 2><b 0x858000010001000000000669636c6f756403636f6d0000010001c00c000100010000105a00044d583737>',
                 'I2' => '',
                 'I3' => '',
@@ -1061,16 +1064,9 @@ class VpnClient
             $wgOutput = (string) $server->executeCommand($wgShowCmd, true);
             $paramNames = ['jc', 'jmin', 'jmax', 's1', 's2', 's3', 's4', 'h1', 'h2', 'h3', 'h4', 'i1', 'i2', 'i3', 'i4', 'i5'];
             foreach ($paramNames as $param) {
-                // For H1-H4 parameters, expect format like "1443912531-1981073285" (two values with dash)
-                // For other parameters, expect single integer value
-                if (in_array($param, ['h1', 'h2', 'h3', 'h4'], true)) {
-                    if (preg_match('/^\s*' . preg_quote($param, '/') . ':\s*(\d+-\d+)/mi', $wgOutput, $matches)) {
-                        $awgParams[strtoupper($param)] = $matches[1];
-                    }
-                } else {
-                    if (preg_match('/^\s*' . preg_quote($param, '/') . ':\s*(\d+)/mi', $wgOutput, $matches)) {
-                        $awgParams[strtoupper($param)] = (int) $matches[1];
-                    }
+                // All H1-H4 and Jc/Jmin/... values are integers per AmneziaWG spec.
+                if (preg_match('/^\s*' . preg_quote($param, '/') . ':\s*(\d+)/mi', $wgOutput, $matches)) {
+                    $awgParams[strtoupper($param)] = (int) $matches[1];
                 }
             }
 
@@ -1130,22 +1126,17 @@ class VpnClient
             $normalizedAwgParams[strtoupper($k)] = $v;
         }
         
-        // Merge: use server params only if they have correct format, otherwise use defaults
-        // This is critical for H1-H4 which must have "value1-value2" format
+        // Server values are the source of truth. Override defaults with whatever
+        // the server's wg0.conf actually has. AmneziaWG spec stores H1-H4 as plain
+        // uint32 integers; older panel code expected "X-Y" range format which is wrong.
         $finalParams = $defaultParams;
         foreach ($normalizedAwgParams as $key => $value) {
             $upperKey = strtoupper($key);
-            
-            // For H1-H4 parameters, only use server value if it has the correct "value1-value2" format
-            if (in_array($upperKey, ['H1', 'H2', 'H3', 'H4'], true)) {
-                if (is_string($value) && preg_match('/^\d+-\d+$/', $value)) {
-                    $finalParams[$upperKey] = $value;
-                }
-                // Otherwise keep the default value
-            } else {
-                // For other parameters, use server value if present
-                $finalParams[$upperKey] = $value;
+            // Empty strings count as "no value" so default isn't accidentally wiped.
+            if ($value === '' || $value === null) {
+                continue;
             }
+            $finalParams[$upperKey] = $value;
         }
         
         $config = "[Interface]\n";
