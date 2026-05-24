@@ -1201,7 +1201,9 @@ Router::get('/clients/{id}', function ($params) {
         $protocolOutput = '';
         $qrCodeVpnUrl = '';
         $vpnUrlConfig = '';
+        $qrCodeIni = '';
         $isAwg2 = false;
+        $isAwgFamily = false;
         try {
             $pdo = DB::conn();
             $protocol = null;
@@ -1219,6 +1221,7 @@ Router::get('/clients/{id}', function ($params) {
                 $clientData['show_text_content'] = !empty($protocol['show_text_content']);
                 $protocolSlug = $protocol['slug'] ?? '';
                 $isAwg2 = ($protocolSlug === 'awg2');
+                $isAwgFamily = in_array($protocolSlug, ['amnezia-wg-advanced', 'awg2', 'wireguard-standard', 'amnezia-wg'], true);
             }
             if ($protocol && ($protocol['output_template'] ?? '') !== '') {
                 $slug = $protocol['slug'] ?? '';
@@ -1236,13 +1239,18 @@ Router::get('/clients/{id}', function ($params) {
             if ($isAwg2 && !empty($clientData['config'])) {
                 try {
                     $qrCodeVpnUrl = VpnClient::generateQRCodeVpnUrl($clientData['config'], 'awg2');
-                    
+
                     // Generate vpn:// URL string using vpn:// format (JSON + zlib)
                     require_once __DIR__ . '/../inc/QrUtil.php';
                     $vpnUrlConfig = 'vpn://' . QrUtil::encodeVpnUrlConf($clientData['config'], 'awg2');
                 } catch (Exception $e) {
                     // Ignore errors, just don't show the second QR
                 }
+            }
+
+            // QR из голого INI-конфига — для приложения AmneziaWG / wg-quick.
+            if ($isAwgFamily && !empty($clientData['config'])) {
+                $qrCodeIni = VpnClient::generateQRCodeIni($clientData['config']);
             }
         } catch (Exception $e) {
             $protocolOutput = '';
@@ -1252,7 +1260,9 @@ Router::get('/clients/{id}', function ($params) {
             'protocol_output' => $protocolOutput,
             'qr_code_vpn_url' => $qrCodeVpnUrl,
             'vpn_url_config' => $vpnUrlConfig,
-            'is_awg2' => $isAwg2
+            'qr_code_ini' => $qrCodeIni,
+            'is_awg2' => $isAwg2,
+            'is_awg_family' => $isAwgFamily,
         ]);
     } catch (Exception $e) {
         http_response_code(404);
@@ -2260,6 +2270,31 @@ Router::get('/api/clients/{id}/details', function ($params) {
         $clientData = $client->getData();
         $stats = $client->getFormattedStats();
 
+        // Для AWG-семейства отдаём дополнительно «сырой» INI и его QR — для приложения AmneziaWG / wg-quick.
+        $protocolSlug = '';
+        $qrCodeIni = '';
+        $configIni = '';
+        try {
+            $pdo = DB::conn();
+            if (!empty($clientData['protocol_id'])) {
+                $stmt = $pdo->prepare('SELECT slug FROM protocols WHERE id = ? LIMIT 1');
+                $stmt->execute([(int) $clientData['protocol_id']]);
+                $protocolSlug = (string) ($stmt->fetchColumn() ?: '');
+            }
+            if ($protocolSlug === '') {
+                $srvStmt = $pdo->prepare('SELECT install_protocol FROM servers WHERE id = ? LIMIT 1');
+                $srvStmt->execute([(int) $clientData['server_id']]);
+                $protocolSlug = (string) ($srvStmt->fetchColumn() ?: '');
+            }
+        } catch (Exception $e) {
+            // не критично
+        }
+        $isAwgFamily = in_array($protocolSlug, ['amnezia-wg-advanced', 'awg2', 'wireguard-standard', 'amnezia-wg'], true);
+        if ($isAwgFamily && !empty($clientData['config']) && strpos($clientData['config'], '[Interface]') !== false) {
+            $configIni = $clientData['config'];
+            $qrCodeIni = VpnClient::generateQRCodeIni($configIni);
+        }
+
         echo json_encode([
             'success' => true,
             'client' => [
@@ -2275,6 +2310,9 @@ Router::get('/api/clients/{id}/details', function ($params) {
                 'last_handshake' => $clientData['last_handshake'],
                 'config' => $clientData['config'],
                 'qr_code' => $clientData['qr_code'],
+                'protocol_slug' => $protocolSlug,
+                'config_ini' => $configIni,
+                'qr_code_ini' => $qrCodeIni,
             ]
         ]);
     } catch (Exception $e) {

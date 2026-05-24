@@ -1383,6 +1383,21 @@ class VpnClient
         }
     }
 
+    // QR из голого INI-конфига [Interface]/[Peer] — читается AmneziaWG / wg-quick.
+    public static function generateQRCodeIni(string $config): string
+    {
+        require_once __DIR__ . '/QrUtil.php';
+        try {
+            if ($config === '' || strpos($config, '[Interface]') === false) {
+                return '';
+            }
+            return QrUtil::pngBase64($config);
+        } catch (Throwable $e) {
+            error_log('Failed to generate INI QR code: ' . $e->getMessage());
+            return '';
+        }
+    }
+
     /**
      * Generate second QR code in vpn:// URL format
      * Used for newer Amnezia app versions that support vpn:// scheme
