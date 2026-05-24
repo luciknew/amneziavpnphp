@@ -797,15 +797,19 @@ class VpnClient
     private static function generateClientKeys(array $serverData, string $clientName): array
     {
         $containerName = $serverData['container_name'];
-        $protocolSlug = (string) ($serverData['install_protocol'] ?? '');
-        $isAwg2 = (stripos($containerName, 'awg2') !== false || $protocolSlug === 'awg2');
-        $wgTool = $isAwg2 ? 'awg' : 'wg';
-
+        // Не хардкодим awg/wg: ключи у AmneziaWG и WireGuard биткомпатимы (Curve25519),
+        // выбираем тот бинарник, который реально есть в контейнере.
         $cmd = sprintf(
-            "docker exec -i %s sh -lc 'set -e; umask 077; priv=\$(%s genkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$priv\" ] || { echo empty_private_key; exit 1; }; pub=\$(printf " . '"' . "%%s\\n" . '"' . " \"\$priv\" | %s pubkey | tr -d " . '"' . "\\r\\n" . '"' . "); [ -n \"\$pub\" ] || { echo empty_public_key; exit 1; }; printf " . '"' . "%%s\\n---\\n%%s\\n" . '"' . " \"\$priv\" \"\$pub\"'",
-            escapeshellarg($containerName),
-            $wgTool,
-            $wgTool
+            "docker exec -i %s sh -lc 'set -e; umask 077; "
+            . "if command -v awg >/dev/null 2>&1; then TOOL=awg; "
+            . "elif command -v wg >/dev/null 2>&1; then TOOL=wg; "
+            . "else echo no_wg_tool; exit 1; fi; "
+            . "priv=\$(\$TOOL genkey | tr -d " . '"' . "\\r\\n" . '"' . "); "
+            . "[ -n \"\$priv\" ] || { echo empty_private_key; exit 1; }; "
+            . "pub=\$(printf " . '"' . "%%s\\n" . '"' . " \"\$priv\" | \$TOOL pubkey | tr -d " . '"' . "\\r\\n" . '"' . "); "
+            . "[ -n \"\$pub\" ] || { echo empty_public_key; exit 1; }; "
+            . "printf " . '"' . "%%s\\n---\\n%%s\\n" . '"' . " \"\$priv\" \"\$pub\"'",
+            escapeshellarg($containerName)
         );
 
         $escaped = escapeshellarg($cmd);
