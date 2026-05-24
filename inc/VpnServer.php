@@ -422,6 +422,32 @@ class VpnServer
     }
 
     /**
+     * Compute the server's wg0 IP from the VPN subnet.
+     * For 10.8.1.0/24 → 10.8.1.1/24 (network address +1).
+     * For an already-valid host address (e.g. 10.8.1.5/24) → returned as-is.
+     */
+    public static function serverWgAddressFromSubnet(string $subnet): string
+    {
+        $subnet = trim($subnet);
+        if ($subnet === '') {
+            return '10.8.1.1/24';
+        }
+        $parts = explode('/', $subnet, 2);
+        $ip = $parts[0];
+        $mask = $parts[1] ?? '24';
+        $octets = explode('.', $ip);
+        if (count($octets) !== 4) {
+            return $subnet;
+        }
+        // If the last octet is the network address (commonly .0 for /24), bump to .1.
+        // Otherwise the subnet field already contains a host address — keep it as is.
+        if ((int) $octets[3] === 0) {
+            $octets[3] = '1';
+        }
+        return implode('.', $octets) . '/' . $mask;
+    }
+
+    /**
      * Host to connect over SSH for management. Falls back to public `host` when
      * `ssh_host` is not set (covers servers that have one address for both clients
      * and SSH). Servers behind NAT can set ssh_host to a private/Tailscale address.
@@ -834,9 +860,13 @@ BASH;
         ];
 
         // Create wg0.conf
+        // Server's wg0 interface MUST get a host address inside the subnet (e.g. 10.8.1.1/24),
+        // not the network address itself (10.8.1.0/24) — otherwise outgoing traffic from clients
+        // can't be NATed/routed and clients get connected but with no Internet.
+        $serverWgAddress = self::serverWgAddressFromSubnet((string) $this->data['vpn_subnet']);
         $wgConfig = "[Interface]\n";
         $wgConfig .= "PrivateKey = {$privKey}\n";
-        $wgConfig .= "Address = {$this->data['vpn_subnet']}\n";
+        $wgConfig .= "Address = {$serverWgAddress}\n";
         $wgConfig .= "ListenPort = {$vpnPort}\n";
         foreach ($awgParams as $key => $value) {
             $wgConfig .= "{$key} = {$value}\n";
