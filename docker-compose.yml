@@ -14,7 +14,7 @@ services:
     ports:
       - "3309:3306"
     volumes:
-      - db_data:/var/lib/mysql
+      - ./db_data:/var/lib/mysql
       - ./migrations:/docker-entrypoint-initdb.d
       - ./my.cnf:/etc/mysql/conf.d/my.cnf:ro
     healthcheck:
@@ -59,8 +59,4 @@ services:
       DOCKER_TLS_CERTDIR: ""
     command: ["dockerd", "--host=tcp://0.0.0.0:2375", "--host=unix:///var/run/docker.sock", "--tls=false", "--dns=8.8.8.8", "--dns=1.1.1.1", "--mtu=1200"]
     volumes:
-      - dind_data:/var/lib/docker
-
-volumes:
-  db_data:
-  dind_data:
+      - ./dind_data:/var/lib/docker

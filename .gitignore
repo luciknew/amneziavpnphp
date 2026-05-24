@@ -17,8 +17,9 @@ node_modules/
 logs/
 *.tmp
 
-# Database
+# Database / DinD persistent data (bind-mounts)
 db_data/
+dind_data/
 
 # Test files
 test_qr.png
