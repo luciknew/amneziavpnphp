@@ -1314,6 +1314,8 @@ Router::get('/clients/{id}', function ($params) {
         $qrCodeVpnUrl = '';
         $vpnUrlConfig = '';
         $isAwg2 = false;
+        $isLegacyAwg = false;
+        $qrCodePlainConf = '';
         try {
             $pdo = DB::conn();
             $protocol = null;
@@ -1327,10 +1329,12 @@ Router::get('/clients/{id}', function ($params) {
                 $protocol = $stmt->fetch();
             }
 
+            $protocolSlug = '';
             if ($protocol) {
                 $clientData['show_text_content'] = !empty($protocol['show_text_content']);
                 $protocolSlug = $protocol['slug'] ?? '';
                 $isAwg2 = ($protocolSlug === 'awg2');
+                $isLegacyAwg = ($protocolSlug === 'amnezia-wg-legacy');
             }
             if ($protocol && ($protocol['output_template'] ?? '') !== '') {
                 $slug = $protocol['slug'] ?? '';
@@ -1343,22 +1347,26 @@ Router::get('/clients/{id}', function ($params) {
                     $protocolOutput = $clientData['config'] ?? '';
                 }
             }
-            
-            // Generate second QR code and vpn:// config for AWG2
-            $qrCodePlainConf = '';
+
+            require_once __DIR__ . '/../inc/QrUtil.php';
+
+            // AmneziaVPN-format QRs (vpn:// URL + extra "Amnezia old" payload) — only for awg2.
             if ($isAwg2 && !empty($clientData['config'])) {
                 try {
                     $qrCodeVpnUrl = VpnClient::generateQRCodeVpnUrl($clientData['config'], 'awg2');
-
-                    // Generate vpn:// URL string using vpn:// format (JSON + zlib)
-                    require_once __DIR__ . '/../inc/QrUtil.php';
                     $vpnUrlConfig = 'vpn://' . QrUtil::encodeVpnUrlConf($clientData['config'], 'awg2');
+                } catch (Exception $e) {
+                    // ignore
+                }
+            }
 
-                    // Third QR: raw plain-text .conf. This is the format the standalone
-                    // AmneziaWG app and standard WireGuard apps expect (no wrapping).
+            // Plain-text .conf QR — works for standalone AmneziaWG and any standard WG client.
+            // Shown for awg2 (extra option) AND for the dedicated legacy AmneziaWG protocol.
+            if (($isAwg2 || $isLegacyAwg) && !empty($clientData['config'])) {
+                try {
                     $qrCodePlainConf = QrUtil::pngBase64($clientData['config']);
                 } catch (Exception $e) {
-                    // Ignore errors, just don't show the extra QR codes
+                    // ignore
                 }
             }
         } catch (Exception $e) {
@@ -1370,7 +1378,8 @@ Router::get('/clients/{id}', function ($params) {
             'qr_code_vpn_url' => $qrCodeVpnUrl,
             'qr_code_plain_conf' => $qrCodePlainConf,
             'vpn_url_config' => $vpnUrlConfig,
-            'is_awg2' => $isAwg2
+            'is_awg2' => $isAwg2,
+            'is_legacy_awg' => $isLegacyAwg,
         ]);
     } catch (Exception $e) {
         http_response_code(404);

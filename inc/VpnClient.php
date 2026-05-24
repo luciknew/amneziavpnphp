@@ -848,8 +848,15 @@ class VpnClient
         $stmt->execute([$serverData['id']]);
         $usedIPs = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        // Reserve network address and server gateway (.1)
-        $used = ['10.8.1.0' => true, '10.8.1.1' => true];
+        // Reserve network address and server gateway (.1) — derived from the actual subnet
+        // (was hardcoded to 10.8.1.0/.1 which broke other subnets like 10.9.0.0/24 used by legacy AWG).
+        $subnet = (string) ($serverData['vpn_subnet'] ?? '10.8.1.0/24');
+        $netParts = explode('/', $subnet);
+        $netLong = ip2long($netParts[0]);
+        $used = [
+            long2ip($netLong)       => true, // network address
+            long2ip($netLong + 1)   => true, // server's wg0 address (.1 by convention)
+        ];
         foreach ($usedIPs as $ip) {
             $used[$ip] = true;
         }

@@ -144,7 +144,7 @@
     </div>
   </div>
   
-  {% if client.qr_code %}
+  {% if client.qr_code and not is_legacy_awg %}
   <div class="bg-white rounded shadow p-6 text-center">
     <h3 class="font-bold mb-4">QR Code (Simple)</h3>
     <img src="{{ client.qr_code }}" alt="QR Code" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
@@ -160,7 +160,7 @@
   </div>
   {% endif %}
 
-  {% if is_awg2 and qr_code_plain_conf %}
+  {% if qr_code_plain_conf %}
   <div class="bg-white rounded shadow p-6 text-center mt-6">
     <h3 class="font-bold mb-4">QR Code (AmneziaWG / WireGuard)</h3>
     <img src="{{ qr_code_plain_conf }}" alt="QR Code Plain Conf" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
@@ -168,7 +168,7 @@
   </div>
   {% endif %}
 
-  {% if is_awg2 and client.config %}
+  {% if (is_awg2 or is_legacy_awg) and client.config %}
   <div class="bg-white rounded shadow p-6 mt-6">
     <h3 class="font-bold mb-4 flex items-center justify-between">
       <span>WireGuard Config (text)</span>
