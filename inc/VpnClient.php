@@ -74,7 +74,7 @@ class VpnClient
                 $protoMetadata = $decodedDef['metadata'] ?? [];
             }
         }
-        $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'awg2'], true);
+        $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'amnezia-wg-legacy', 'awg2'], true);
 
         // Auto-sync server keys from container EVERY TIME for WireGuard protocols
         // This ensures we always use current container configuration even if it was recreated
@@ -1127,16 +1127,24 @@ class VpnClient
             $serverParams[strtoupper($k)] = $v;
         }
 
-        $config = "[Interface]\n";
-        $config .= "PrivateKey = {$privateKey}\n";
-        $config .= "Address = {$clientIP}/24\n";
-        $config .= "DNS = 1.1.1.1\n";
+        // Two distinct client-config formats — they target different mobile apps
+        // and the apps' parsers are not interchangeable:
+        //   amnezia-wg-legacy → AmneziaWG (standalone) app: /24, single DNS,
+        //                       no S3/S4/I1, no ::/0, PersistentKeepalive=0.
+        //   anything else (awg2/amnezia-wg-advanced) → AmneziaVPN app: /32,
+        //                       two DNS, may include S3/S4/I1-I5, ::/0, keepalive=25.
+        if ($protocolSlug === 'amnezia-wg-legacy') {
+            return self::buildLegacyAwgClientConfig(
+                $privateKey, $clientIP, $serverPublicKey, $presharedKey,
+                $serverHost, $serverPort, $serverParams
+            );
+        }
 
-        // Emit ONLY parameters that the server actually has in its wg0.conf.
-        // If we add params the server doesn't know about (e.g. S3/S4/I1 on a
-        // legacy AmneziaWG server), the client sends extra obfuscation the
-        // server can't handle — handshake may pass but tunnel data gets dropped.
-        // Order chosen to match the reference standalone AmneziaWG config.
+        $config = "[Interface]\n";
+        $config .= "Address = {$clientIP}/32\n";
+        $config .= "DNS = 1.1.1.1, 1.0.0.1\n";
+        $config .= "PrivateKey = {$privateKey}\n";
+
         $paramOrder = ['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'S3', 'S4', 'H1', 'H2', 'H3', 'H4', 'I1', 'I2', 'I3', 'I4', 'I5'];
         foreach ($paramOrder as $key) {
             $upperKey = strtoupper($key);
@@ -1146,9 +1154,43 @@ class VpnClient
             $config .= "{$key} = {$serverParams[$upperKey]}\n";
         }
 
-        // [Peer] in the order matching the reference standalone AmneziaWG config:
-        //   PublicKey, PresharedKey, AllowedIPs, PersistentKeepalive, Endpoint.
-        // AllowedIPs without ::/0 (IPv6 inside tunnel) — server typically lacks v6.
+        $config .= "\n[Peer]\n";
+        $config .= "PublicKey = {$serverPublicKey}\n";
+        $config .= "PresharedKey = {$presharedKey}\n";
+        $config .= "Endpoint = {$serverHost}:{$serverPort}\n";
+        $config .= "AllowedIPs = 0.0.0.0/0, ::/0\n";
+        $config .= "PersistentKeepalive = 25\n\n";
+
+        return $config;
+    }
+
+    /**
+     * Build client config for legacy AmneziaWG protocol (standalone app target).
+     * Matches the reference format produced by w0rng/amnezia-wg-easy.
+     */
+    private static function buildLegacyAwgClientConfig(
+        string $privateKey,
+        string $clientIP,
+        string $serverPublicKey,
+        string $presharedKey,
+        string $serverHost,
+        int $serverPort,
+        array $serverParams
+    ): string {
+        $config = "[Interface]\n";
+        $config .= "PrivateKey = {$privateKey}\n";
+        $config .= "Address = {$clientIP}/24\n";
+        $config .= "DNS = 1.1.1.1\n";
+
+        // Legacy AmneziaWG knows only these 9 params — never emit S3/S4/I*.
+        foreach (['Jc', 'Jmin', 'Jmax', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'] as $key) {
+            $upperKey = strtoupper($key);
+            if (!array_key_exists($upperKey, $serverParams)) {
+                continue;
+            }
+            $config .= "{$key} = {$serverParams[$upperKey]}\n";
+        }
+
         $config .= "\n[Peer]\n";
         $config .= "PublicKey = {$serverPublicKey}\n";
         $config .= "PresharedKey = {$presharedKey}\n";
@@ -1488,7 +1530,7 @@ class VpnClient
             $stmt = $pdo->prepare('SELECT slug FROM protocols WHERE id = ?');
             $stmt->execute([$protocolId]);
             $slug = (string) $stmt->fetchColumn();
-            return in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'awg2'], true);
+            return in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'amnezia-wg-legacy', 'awg2'], true);
         } catch (Exception $e) {
             return true;
         }
@@ -1700,7 +1742,7 @@ class VpnClient
             $protoRow = $stmt->fetch();
         }
         $slug = $protoRow['slug'] ?? '';
-        $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'awg2'], true);
+        $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'amnezia-wg-legacy', 'awg2'], true);
 
         if (!$isWireguard) {
             return ['success' => false, 'error' => 'not_wireguard_protocol', 'protocol_slug' => $slug];
@@ -1735,7 +1777,7 @@ class VpnClient
 
         // If AWG params are missing (common after reinstall), fetch them directly from wg0.conf
         // to avoid falling back to template defaults that will not match the server.
-        if (in_array($slug, ['amnezia-wg-advanced', 'awg2'], true)) {
+        if (in_array($slug, ['amnezia-wg-advanced', 'amnezia-wg-legacy', 'awg2'], true)) {
             $needKeys = ['JC', 'JMIN', 'JMAX', 'S1', 'S2', 'H1', 'H2', 'H3', 'H4'];
             $missing = false;
             foreach ($needKeys as $k) {

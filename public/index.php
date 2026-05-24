@@ -1334,7 +1334,7 @@ Router::get('/clients/{id}', function ($params) {
             }
             if ($protocol && ($protocol['output_template'] ?? '') !== '') {
                 $slug = $protocol['slug'] ?? '';
-                $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'awg2'], true);
+                $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'amnezia-wg-legacy', 'awg2'], true);
                 if ($isWireguard) {
                     // For WG, we don't render protocol_output; config is downloadable
                     $protocolOutput = '';
