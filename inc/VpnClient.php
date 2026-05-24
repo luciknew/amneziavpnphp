@@ -1398,6 +1398,75 @@ class VpnClient
         }
     }
 
+    // Собрать INI из исходных полей БД (минуя хранимый client.config — он у кастомных шаблонов может быть пустым).
+    // Возвращает '' если данных недостаточно или это не AWG/WG-семейство.
+    public function buildIniConfigFromData(): string
+    {
+        if (!$this->data) {
+            return '';
+        }
+        $privateKey = (string) ($this->data['private_key'] ?? '');
+        $clientIP = (string) ($this->data['client_ip'] ?? '');
+        if ($privateKey === '' || $clientIP === '') {
+            return '';
+        }
+        try {
+            $server = new VpnServer((int) $this->data['server_id']);
+            $serverData = $server->getData();
+        } catch (Throwable $e) {
+            return '';
+        }
+        if (!$serverData) {
+            return '';
+        }
+        $serverPub = (string) ($serverData['server_public_key'] ?? '');
+        $host = (string) ($serverData['host'] ?? '');
+        $port = (int) ($serverData['vpn_port'] ?? 0);
+        if ($serverPub === '' || $host === '' || $port <= 0) {
+            return '';
+        }
+
+        // Per-peer PSK имеет приоритет над server-default; падаем обратно если что.
+        $psk = (string) ($this->data['preshared_key'] ?? ($serverData['preshared_key'] ?? ''));
+
+        $awgParams = json_decode((string) ($serverData['awg_params'] ?? '{}'), true);
+        if (!is_array($awgParams)) {
+            $awgParams = [];
+        }
+
+        $slug = '';
+        try {
+            $pid = (int) ($this->data['protocol_id'] ?? 0);
+            if ($pid > 0) {
+                $pdo = DB::conn();
+                $st = $pdo->prepare('SELECT slug FROM protocols WHERE id = ? LIMIT 1');
+                $st->execute([$pid]);
+                $slug = (string) ($st->fetchColumn() ?: '');
+            }
+            if ($slug === '') {
+                $slug = (string) ($serverData['install_protocol'] ?? '');
+            }
+        } catch (Throwable $e) {
+            // fallback на пустой slug — buildClientConfig подставит дефолты
+        }
+
+        try {
+            return self::buildClientConfig(
+                $privateKey,
+                $clientIP,
+                $serverPub,
+                $psk,
+                $host,
+                $port,
+                $awgParams,
+                $slug
+            );
+        } catch (Throwable $e) {
+            error_log('buildIniConfigFromData failed: ' . $e->getMessage());
+            return '';
+        }
+    }
+
     /**
      * Generate second QR code in vpn:// URL format
      * Used for newer Amnezia app versions that support vpn:// scheme

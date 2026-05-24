@@ -1261,8 +1261,15 @@ Router::get('/clients/{id}', function ($params) {
             }
 
             // QR из голого INI-конфига — для приложения AmneziaWG / wg-quick.
-            if ($isAwgFamily && !empty($clientData['config'])) {
-                $qrCodeIni = VpnClient::generateQRCodeIni($clientData['config']);
+            // Собираем INI из исходных полей БД, чтобы обойти пустой client.config у кастомных протоколов.
+            if ($isAwgFamily) {
+                $iniBuilt = $client->buildIniConfigFromData();
+                if ($iniBuilt === '' && !empty($clientData['config'])) {
+                    $iniBuilt = (string) $clientData['config'];
+                }
+                if ($iniBuilt !== '') {
+                    $qrCodeIni = VpnClient::generateQRCodeIni($iniBuilt);
+                }
             }
         } catch (Exception $e) {
             $protocolOutput = '';
@@ -1320,6 +1327,18 @@ Router::get('/clients/{id}/download', function ($params) {
         }
 
         $config = $client->getConfig();
+
+        // Если хранимый config пустой/с пустыми полями (кастомный шаблон без переменных) —
+        // соберём INI из исходных полей БД, чтобы скачался валидный wg/awg-конфиг.
+        $looksBroken = $config === ''
+            || (stripos($config, '[Interface]') !== false
+                && preg_match('/^\s*PrivateKey\s*=\s*$/m', $config));
+        if ($looksBroken) {
+            $rebuilt = $client->buildIniConfigFromData();
+            if ($rebuilt !== '') {
+                $config = $rebuilt;
+            }
+        }
 
         // Use login if available, fallback to name
         $baseName = !empty($clientData['login']) ? $clientData['login'] : $clientData['name'];
@@ -2304,7 +2323,12 @@ Router::get('/api/clients/{id}/details', function ($params) {
         // Детектим AWG/WG по содержимому конфига — не привязываемся к slug'ам (legacy/advanced/awg2/standard/…).
         $isAwgFamily = !empty($clientData['config']) && stripos((string) $clientData['config'], '[Interface]') !== false;
         if ($isAwgFamily) {
-            $configIni = $clientData['config'];
+            // Берём INI из исходных полей БД (фолбэк на client.config), чтобы избежать пустых плейсхолдеров
+            // у кастомных протокольных шаблонов.
+            $configIni = $client->buildIniConfigFromData();
+            if ($configIni === '') {
+                $configIni = (string) $clientData['config'];
+            }
             $qrCodeIni = VpnClient::generateQRCodeIni($configIni);
         }
 
