@@ -144,18 +144,12 @@
     </div>
   </div>
   
-  {% if client.qr_code %}
+  {# Старый client.qr_code (Qt/QDataStream envelope из БД) не читается ни AmneziaVPN, ни AmneziaWG — не показываем. #}
+
+  {% if qr_code_vpn_url %}
   <div class="bg-white rounded shadow p-6 text-center">
     <h3 class="font-bold mb-4">QR Code — AmneziaVPN</h3>
-    <img src="{{ client.qr_code }}" alt="QR Code" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
-    <p class="text-sm text-gray-600 mt-2">Scan with the <strong>AmneziaVPN</strong> app</p>
-  </div>
-  {% endif %}
-
-  {% if is_awg2 and qr_code_vpn_url %}
-  <div class="bg-white rounded shadow p-6 text-center mt-6">
-    <h3 class="font-bold mb-4">QR Code — AmneziaVPN (vpn:// URL)</h3>
-    <img src="{{ qr_code_vpn_url }}" alt="QR Code VPN URL" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
+    <img src="{{ qr_code_vpn_url }}" alt="QR Code AmneziaVPN" class="mx-auto" style="max-width: 300px; width: 100%; height: auto;">
     <p class="text-sm text-gray-600 mt-2">Scan with the <strong>AmneziaVPN</strong> app</p>
   </div>
   {% endif %}

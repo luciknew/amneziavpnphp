@@ -1215,6 +1215,7 @@ Router::get('/clients/{id}', function ($params) {
         $qrCodeIni = '';
         $isAwg2 = false;
         $isAwgFamily = false;
+        $protocolSlug = '';
         try {
             $pdo = DB::conn();
             $protocol = null;
@@ -1247,29 +1248,30 @@ Router::get('/clients/{id}', function ($params) {
                 }
             }
             
-            // Generate second QR code and vpn:// config for AWG2
-            if ($isAwg2 && !empty($clientData['config'])) {
-                try {
-                    $qrCodeVpnUrl = VpnClient::generateQRCodeVpnUrl($clientData['config'], 'awg2');
-
-                    // Generate vpn:// URL string using vpn:// format (JSON + zlib)
-                    require_once __DIR__ . '/../inc/QrUtil.php';
-                    $vpnUrlConfig = 'vpn://' . QrUtil::encodeVpnUrlConf($clientData['config'], 'awg2');
-                } catch (Exception $e) {
-                    // Ignore errors, just don't show the second QR
-                }
-            }
-
-            // QR из голого INI-конфига — для приложения AmneziaWG / wg-quick.
-            // Собираем INI из исходных полей БД, чтобы обойти пустой client.config у кастомных протоколов.
+            // Для AWG-семейства строим источник INI заранее: предпочитаем сборку из сырых полей БД
+            // (надёжно даже когда client.config сломан кастомным шаблоном), с фолбэком на хранимый config.
+            $iniBuilt = '';
             if ($isAwgFamily) {
                 $iniBuilt = $client->buildIniConfigFromData();
                 if ($iniBuilt === '' && !empty($clientData['config'])) {
                     $iniBuilt = (string) $clientData['config'];
                 }
-                if ($iniBuilt !== '') {
-                    $qrCodeIni = VpnClient::generateQRCodeIni($iniBuilt);
+            }
+
+            // QR + vpn:// URL для приложения AmneziaVPN — для любого AWG-семейства, не только awg2.
+            if ($isAwgFamily && $iniBuilt !== '') {
+                try {
+                    require_once __DIR__ . '/../inc/QrUtil.php';
+                    $qrCodeVpnUrl = VpnClient::generateQRCodeVpnUrl($iniBuilt, $protocolSlug);
+                    $vpnUrlConfig = 'vpn://' . QrUtil::encodeVpnUrlConf($iniBuilt, $protocolSlug);
+                } catch (Exception $e) {
+                    // Ignore errors, just don't show the QR/URL
                 }
+            }
+
+            // QR из голого INI-конфига — для приложения AmneziaWG / wg-quick.
+            if ($isAwgFamily && $iniBuilt !== '') {
+                $qrCodeIni = VpnClient::generateQRCodeIni($iniBuilt);
             }
         } catch (Exception $e) {
             $protocolOutput = '';
