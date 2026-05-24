@@ -1232,8 +1232,9 @@ Router::get('/clients/{id}', function ($params) {
                 $clientData['show_text_content'] = !empty($protocol['show_text_content']);
                 $protocolSlug = $protocol['slug'] ?? '';
                 $isAwg2 = ($protocolSlug === 'awg2');
-                $isAwgFamily = in_array($protocolSlug, ['amnezia-wg-advanced', 'awg2', 'wireguard-standard', 'amnezia-wg'], true);
             }
+            // Детектим AWG/WG по содержимому конфига — не привязываемся к slug'ам, которых много (legacy/advanced/awg2/standard/…).
+            $isAwgFamily = !empty($clientData['config']) && stripos((string) $clientData['config'], '[Interface]') !== false;
             if ($protocol && ($protocol['output_template'] ?? '') !== '') {
                 $slug = $protocol['slug'] ?? '';
                 $isWireguard = in_array($slug, ['amnezia-wg-advanced', 'wireguard-standard', 'amnezia-wg', 'awg2'], true);
@@ -2300,8 +2301,9 @@ Router::get('/api/clients/{id}/details', function ($params) {
         } catch (Exception $e) {
             // не критично
         }
-        $isAwgFamily = in_array($protocolSlug, ['amnezia-wg-advanced', 'awg2', 'wireguard-standard', 'amnezia-wg'], true);
-        if ($isAwgFamily && !empty($clientData['config']) && strpos($clientData['config'], '[Interface]') !== false) {
+        // Детектим AWG/WG по содержимому конфига — не привязываемся к slug'ам (legacy/advanced/awg2/standard/…).
+        $isAwgFamily = !empty($clientData['config']) && stripos((string) $clientData['config'], '[Interface]') !== false;
+        if ($isAwgFamily) {
             $configIni = $clientData['config'];
             $qrCodeIni = VpnClient::generateQRCodeIni($configIni);
         }
